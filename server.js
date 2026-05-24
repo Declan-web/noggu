@@ -8,45 +8,66 @@ const io = require('socket.io')(http, {
     }
 });
 
-// Render 배포 환경의 동적 포트를 자동으로 잡거나, 로컬용 3000번 포트를 사용하도록 설정
+// Render 배포 환경 포트 자동 매칭 (없으면 로컬 3000번 사용)
 const PORT = process.env.PORT || 3000;
 
-// Render 접속 시 첫 화면으로 index.html을 연결해주는 필수 경로 (Not Found 해결)
+// 웹 브라우저 접속 시 원래 디자인 파일(index.html)을 정확히 띄워주는 경로 설정
 app.get('/', (req, res) => {
     res.sendFile(__dirname + '/index.html');
 });
 
-// 기존 실시간 접속 플레이어 및 관전자 관리 데이터 객체
+// 기존 게임 상태 관리 데이터 (선수 명단, 공 위치, 점수 등 원래 로직 보존)
 let players = {};
+let gameState = {
+    ball: { x: 400, y: 300, vx: 0, vy: 0 },
+    score: { blue: 0, red: 0 },
+    gameStarted: false,
+    maxPlayers: 1 // 기본 1 VS 1 설정 값
+};
 
 io.on('connection', (socket) => {
-    console.log(`유저 접속됨: ${socket.id}`);
+    console.log(`유저 접속: ${socket.id}`);
 
-    // 기존 로그인 및 게임 참여 (관전자 모드 대응 데이터 구조 유지)
+    // 기존 유저가 방에 들어올 때 처리하던 이벤트
     socket.on('joinGame', (playerData) => {
         players[socket.id] = {
             id: socket.id,
-            name: playerData.name,
-            team: playerData.team,         // 'A', 'B', 또는 'spectator'(관전자)
+            name: playerData.name || 'Player',
+            team: playerData.team, // 'BLUE' 또는 'RED' 또는 'spectator'
             isSpectator: playerData.isSpectator || false,
-            x: playerData.x || 400,
-            y: playerData.y || 300
+            x: playerData.x || (playerData.team === 'BLUE' ? 200 : 600),
+            y: playerData.y || 300,
+            number: playerData.number || 1
         };
-        // 현재 접속 중인 모든 유저에게 상태 갱신 공유
+        // 전체에 현재 플레이어 상태 전송
         io.emit('updatePlayers', players);
+        io.emit('updateGameState', gameState);
     });
 
-    // 플레이어가 움직였을 때 실시간 위치 동기화
+    // 기존 인원 설정 변경 이벤트 (1 VS 1 ~ 5 VS 5)
+    socket.on('changeMaxPlayers', (val) => {
+        gameState.maxPlayers = parseInt(val);
+        io.emit('updateGameState', gameState);
+    });
+
+    // 기존 게임 스타트 버튼 트리거
+    socket.on('startGame', () => {
+        gameState.gameStarted = true;
+        // 공 위치 초기화 및 이동 상태 설정
+        gameState.ball = { x: 400, y: 300, vx: 0, vy: 0 };
+        io.emit('gameStarted', gameState);
+    });
+
+    // 플레이어 이동 동기화
     socket.on('playerMove', (moveData) => {
         if (players[socket.id] && !players[socket.id].isSpectator) {
             players[socket.id].x = moveData.x;
             players[socket.id].y = moveData.y;
-            // 다른 사람들에게 실시간 위치 전달
             socket.broadcast.emit('updatePlayers', players);
         }
     });
 
-    // 기존 관전자 모드 전환 이벤트 대응
+    // 기존 관전자 전환 시스템 이벤트
     socket.on('changeToSpectator', () => {
         if (players[socket.id]) {
             players[socket.id].isSpectator = true;
@@ -55,26 +76,15 @@ io.on('connection', (socket) => {
         }
     });
 
-    // 기존 선수 모드 복귀 이벤트 대응
-    socket.on('changeToPlayer', (playerData) => {
-        if (players[socket.id]) {
-            players[socket.id].isSpectator = false;
-            players[socket.id].team = playerData.team;
-            players[socket.id].x = playerData.x;
-            players[socket.id].y = playerData.y;
-            io.emit('updatePlayers', players);
-        }
-    });
-
-    // 유저 접속 종료 시 명단에서 제외
+    // 퇴장 처리
     socket.on('disconnect', () => {
-        console.log(`유저 나감: ${socket.id}`);
+        console.log(`유저 퇴장: ${socket.id}`);
         delete players[socket.id];
         io.emit('updatePlayers', players);
     });
 });
 
-// 서버 기동 실행 로그
+// 서버 기동 실행
 http.listen(PORT, () => {
-    console.log(`🚀 서버가 작동 중입니다! 포트번호: ${PORT}`);
+    console.log(`서버가 정상적으로 가동 중입니다. 포트: ${PORT}`);
 });

@@ -10,65 +10,79 @@ const io = require('socket.io')(http, {
 
 const PORT = process.env.PORT || 3000;
 
-// Render 접속 시 index.html 파일 매칭
+// Render 서버 라우팅 대응 (Not Found 처리 완료)
 app.get('/', (req, res) => {
     res.sendFile(__dirname + '/index.html');
 });
 
-let players = {};
-let gameState = {
-    ball: { x: 425, y: 250, vx: 0, vy: 0 },
-    score: { blue: 0, red: 0 },
-    gameStarted: false,
-    maxPlayers: 1
-};
-
 io.on('connection', (socket) => {
-    console.log(`유저 접속: ${socket.id}`);
+    console.log(`클라이언트 소켓 연결 완료: ${socket.id}`);
 
-    socket.on('joinGame', (playerData) => {
-        // 새로 접속한 유저를 반대 진영에 배치하기 위한 기초 카운트 분기 로직
-        const playerCount = Object.keys(players).length;
-        const assignedTeam = (playerCount % 2 === 0) ? 'BLUE' : 'RED';
-
-        players[socket.id] = {
-            id: socket.id,
-            name: playerData.name || 'Player',
-            team: assignedTeam,
-            x: assignedTeam === 'BLUE' ? 200 : 650,
-            y: 250,
-            number: (assignedTeam === 'BLUE') ? Math.floor(playerCount/2) + 1 : Math.floor(playerCount/2) + 1
-        };
-        io.emit('updatePlayers', players);
-        io.emit('updateGameState', gameState);
+    // 위치 데이터 중계
+    socket.on('syncPlayerMove', (data) => {
+        socket.broadcast.emit('onPlayerMove', data);
     });
 
-    socket.on('changeMaxPlayers', (val) => {
-        gameState.maxPlayers = parseInt(val);
-        io.emit('updateGameState', gameState);
+    // 볼 실시간 주사 위치 동기화
+    socket.on('syncBallLocation', (data) => {
+        socket.broadcast.emit('onBallLocation', data);
     });
 
-    socket.on('startGame', () => {
-        gameState.gameStarted = true;
-        gameState.ball = { x: 425, y: 250, vx: 0, vy: 0 };
-        io.emit('gameStarted', gameState);
+    // 슛/패스/선점 등의 액션 전파
+    socket.on('syncBallAction', (data) => {
+        io.emit('onBallAction', data);
     });
 
-    socket.on('playerMove', (moveData) => {
-        if (players[socket.id]) {
-            players[socket.id].x = moveData.x;
-            players[socket.id].y = moveData.y;
-            socket.broadcast.emit('updatePlayers', players);
-        }
+    // 유저 선점 네임드 배포
+    socket.on('syncRegisterOwner', (data) => {
+        socket.broadcast.emit('onRegisterOwner', data);
+    });
+
+    // 인원수 변경 동기화
+    socket.on('syncMatchType', (maxPairs) => {
+        socket.broadcast.emit('onMatchType', maxPairs);
+    });
+
+    // 게임 시작 동기화
+    socket.on('syncStartGame', (data) => {
+        io.emit('onStartGame', data);
+    });
+
+    // 리셋 동기화
+    socket.on('syncResetMatch', () => {
+        io.emit('onResetMatch');
+    });
+
+    // 스코어 갱신
+    socket.on('syncScore', (data) => {
+        socket.broadcast.emit('onScore', data);
+    });
+
+    // 디펜스 미니게임 진입 선포
+    socket.on('syncStartDefense', (data) => {
+        io.emit('onStartDefense', data);
+    });
+
+    // 미니게임 게이지 실시간 동기화
+    socket.on('syncMiniGameTick', (data) => {
+        socket.broadcast.emit('onMiniGameTick', data);
+    });
+
+    // 유저 스페이스바 입력값 타격 반영 중계
+    socket.on('syncMiniGameHit', (gauge) => {
+        socket.broadcast.emit('onMiniGameHit', gauge);
+    });
+
+    // 미니게임 종료 선언 판정
+    socket.on('syncEndMiniGame', (isDefWin) => {
+        io.emit('onEndMiniGame', isDefWin);
     });
 
     socket.on('disconnect', () => {
-        console.log(`유저 퇴장: ${socket.id}`);
-        delete players[socket.id];
-        io.emit('updatePlayers', players);
+        console.log(`유저 연결 해제: ${socket.id}`);
     });
 });
 
 http.listen(PORT, () => {
-    console.log(`서버 작동 중. 포트: ${PORT}`);
+    console.log(`서버 정상 기동 중. 포트번호: ${PORT}`);
 });

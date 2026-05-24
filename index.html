@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>실시간 멀티플레이 농구 게임</title>
+    <title>실시간 멀티플레이 농구 게임 (관리자 권한 패널 통합)</title>
     <style>
         body {
             margin: 0;
@@ -17,7 +17,6 @@
             height: 100vh;
             overflow: hidden;
         }
-        /* 상단 설정 바 스타일 지정 */
         #topBar {
             background-color: #383838;
             border: 1px solid #4a4a4a;
@@ -29,10 +28,9 @@
             margin-bottom: 12px;
             font-size: 14px;
             width: 764px;
+            position: relative;
         }
-        .divider {
-            color: #555;
-        }
+        .divider { color: #555; }
         select {
             background-color: #222;
             color: white;
@@ -43,33 +41,52 @@
             cursor: pointer;
         }
         #startBtn {
-            background-color: #f39c12; /* 원래 화면의 주황색 버튼 색상 */
+            background-color: #f39c12; 
             color: white;
             border: none;
             padding: 6px 14px;
             font-weight: bold;
             border-radius: 4px;
             cursor: pointer;
-            display: flex;
+        }
+        #startBtn:hover { background-color: #d35400; }
+        #statusText { color: #f1c40f; font-size: 13px; }
+        
+        /* [관리자 UI 인증 단추 스타일] */
+        #adminLoginBtn {
+            position: absolute;
+            right: 15px;
+            background-color: #7f8c8d;
+            font-size: 11px;
+            padding: 4px 8px;
+            margin: 0;
+        }
+        /* [관리자 전용 제어 명령 패널 스타일] */
+        #adminPanel {
+            background-color: #c0392b;
+            border: 1px solid #e74c3c;
+            border-radius: 4px;
+            padding: 6px 15px;
+            margin-bottom: 10px;
+            display: none; /* 관리자 인증 완료 시 스크립트로 노출 제어 */
+            gap: 15px;
             align-items: center;
-            gap: 4px;
-        }
-        #startBtn:hover {
-            background-color: #d35400;
-        }
-        #statusText {
-            color: #f1c40f; /* 대기 모드 안내용 노란색 글씨 */
             font-size: 13px;
+            width: 774px;
         }
-        /* 게임 경기장 테두리 */
+        .admin-core-btn {
+            background-color: #2c3e50;
+            font-size: 12px;
+            padding: 4px 10px;
+            margin: 0;
+        }
+
         #gameCanvas {
             border: 4px solid #fff;
             border-radius: 4px;
-            background-color: #d35400; /* 원래의 짙은 오렌지 브라운 코트 바닥색 */
+            background-color: #d35400; 
             box-shadow: 0 8px 24px rgba(0,0,0,0.5);
-            cursor: default;
         }
-        /* 하단 전광판 스코어 보드 스타일 */
         #scoreBoard {
             display: flex;
             gap: 30px;
@@ -84,6 +101,12 @@
 </head>
 <body>
 
+    <div id="adminPanel">
+        <span>⚡ <b>관리자 시스템 가동 중</b> :</span>
+        <button class="admin-core-btn" id="adminResetScoreBtn">점수 초기화</button>
+        <button class="admin-core-btn" id="adminKickBtn">특정 유저 강제퇴장</button>
+    </div>
+
     <div id="topBar">
         <div>
             <span class="divider">|</span> &nbsp;인원: 
@@ -97,6 +120,7 @@
         </div>
         <button id="startBtn">▶ GAME START</button>
         <div id="statusText">[대기 모드] 캐릭터를 선택하고 게임을 기동하세요.</div>
+        <button id="adminLoginBtn">관리자 인증</button>
     </div>
 
     <canvas id="gameCanvas" width="850" height="500"></canvas>
@@ -117,19 +141,27 @@
         const statusText = document.getElementById('statusText');
         const blueScoreText = document.getElementById('blueScoreText');
         const redScoreText = document.getElementById('redScoreText');
+        
+        // 관리자용 UI 요소 바인딩
+        const adminPanel = document.getElementById('adminPanel');
+        const adminLoginBtn = document.getElementById('adminLoginBtn');
+        const adminResetScoreBtn = document.getElementById('adminResetScoreBtn');
+        const adminKickBtn = document.getElementById('adminKickBtn');
 
         let myId = null;
         let remotePlayers = {};
         let gameState = {
             ball: { x: 425, y: 250 },
             score: { blue: 0, red: 0 },
-            gameStarted: false
+            gameStarted: false,
+            adminId: null
         };
 
-        // 내 초기 더미 위치값 데이터 정의
         let myData = {
             name: 'Chaehee',
-            team: 'BLUE', // 테스트용 기본 팀 설정
+            team: 'BLUE', 
+            isSpectator: false,
+            isAdmin: false,
             x: 200,
             y: 250,
             number: 1
@@ -137,24 +169,57 @@
 
         const keys = {};
 
-        // 1. 인원 설정 교환 연동
+        // [관리자 이벤트 수신기 부착]
+        adminLoginBtn.addEventListener('click', () => {
+            const pass = prompt("관리자 인증 비밀번호를 입력하세요:");
+            if(pass) socket.emit('verifyAdminPassword', pass);
+        });
+
+        socket.on('adminAuthResult', (res) => {
+            alert(res.message);
+            if(res.success) {
+                adminPanel.style.display = 'flex'; // 관리자 전용 제어바 노출
+            }
+        });
+
+        adminResetScoreBtn.addEventListener('click', () => {
+            socket.emit('adminCommand', { type: 'RESET_SCORE' });
+        });
+
+        adminKickBtn.addEventListener('click', () => {
+            const target = prompt("추방할 플레이어의 고유 소켓 ID를 입력하세요:");
+            if(target) socket.emit('adminCommand', { type: 'KICK_PLAYER', targetId: target });
+        });
+
+        socket.on('forcedKick', () => {
+            alert("관리자에 의해 방에서 강제 퇴장 처리되었습니다.");
+            location.reload();
+        });
+
+        socket.on('errorNotification', (msg) => { alert(msg); });
+
+        // 인원 설정 및 게임 구동 연동 동작
         playerCountSelect.addEventListener('change', (e) => {
             socket.emit('changeMaxPlayers', e.target.value);
         });
 
-        // 2. 게임 스타트 버튼 작동
         startBtn.addEventListener('click', () => {
             socket.emit('startGame');
         });
 
         socket.on('connect', () => {
             myId = socket.id;
-            // 최초 서버 접속 시 데이터 생성 및 진입 신호 발생
             socket.emit('joinGame', myData);
         });
 
         socket.on('updatePlayers', (serverPlayers) => {
             remotePlayers = serverPlayers;
+            // 만약 내가 관리자 권한을 획득했다면 제어판 노출 동기화
+            if (remotePlayers[myId] && remotePlayers[myId].isAdmin) {
+                adminPanel.style.display = 'flex';
+            } else {
+                adminPanel.style.display = 'none';
+            }
         });
 
         socket.on('updateGameState', (serverState) => {
@@ -167,15 +232,14 @@
         socket.on('gameStarted', (serverState) => {
             gameState = serverState;
             statusText.textContent = "[경기 중] 실시간 매치가 진행 중입니다!";
-            statusText.style.color = "#2ecc71"; // 경기 시작 시 초록색 변경
+            statusText.style.color = "#2ecc71";
         });
 
-        // 조작키 바인딩
         window.addEventListener('keydown', (e) => { keys[e.key] = true; });
         window.addEventListener('keyup', (e) => { keys[e.key] = false; });
 
         function updateMovement() {
-            if (remotePlayers[myId] && remotePlayers[myId].isSpectator) return;
+            if (!remotePlayers[myId] || remotePlayers[myId].isSpectator) return;
 
             let moved = false;
             let speed = 4;
@@ -185,7 +249,6 @@
             if (keys['ArrowLeft'] || keys['a'] || keys['A']) { myData.x -= speed; moved = true; }
             if (keys['ArrowRight'] || keys['d'] || keys['D']) { myData.x += speed; moved = true; }
 
-            // 경기장 테두리 충돌 한계선 계산
             if (myData.x < 20) myData.x = 20;
             if (myData.x > canvas.width - 20) myData.x = canvas.width - 20;
             if (myData.y < 20) myData.y = 20;
@@ -199,33 +262,32 @@
         function drawGame() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // [맵 디자인] 경기장 내부 흰색 선 작도 (원래 양식 반영)
+            // [코트 라인 페인팅 구현]
             ctx.strokeStyle = "rgba(255, 255, 255, 0.6)";
             ctx.lineWidth = 2;
 
-            // 1. 중앙선 및 정중앙 센터 서클
+            // 정중앙선 및 중앙 서클 원형 도포
             ctx.beginPath();
             ctx.moveTo(canvas.width / 2, 0);
             ctx.lineTo(canvas.width / 2, canvas.height);
             ctx.stroke();
-
             ctx.beginPath();
             ctx.arc(canvas.width / 2, canvas.height / 2, 60, 0, Math.PI * 2);
             ctx.stroke();
 
-            // 2. 왼쪽 영역 페널티 박스 구획 및 골라인 서클
+            // 좌측 페널티 에어리어 라인 설계
             ctx.strokeRect(0, 150, 80, 200);
             ctx.beginPath();
             ctx.arc(80, 250, 40, -Math.PI/2, Math.PI/2);
             ctx.stroke();
 
-            // 3. 오른쪽 영역 페널티 박스 구획 및 골라인 서클
+            // 우측 페널티 에어리어 라인 설계
             ctx.strokeRect(canvas.width - 80, 150, 80, 200);
             ctx.beginPath();
             ctx.arc(canvas.width - 80, 250, 40, Math.PI/2, -Math.PI/2);
             ctx.stroke();
 
-            // [오브젝트 렌더링] 중앙 정밀 농구공 배치 그리기
+            // [오브젝트 그리기] 중앙 오렌지 농구공 마크 배치
             ctx.beginPath();
             ctx.arc(gameState.ball.x, gameState.ball.y, 10, 0, Math.PI * 2);
             ctx.fillStyle = "#e67e22";
@@ -234,7 +296,7 @@
             ctx.lineWidth = 1.5;
             ctx.stroke();
 
-            // [유저 모델링] 원형 선수 칩 및 백넘버 텍스트 인쇄
+            // [선수 렌더링 엔진]
             for (let id in remotePlayers) {
                 const player = remotePlayers[id];
                 if (player.isSpectator) continue;
@@ -242,7 +304,6 @@
                 ctx.beginPath();
                 ctx.arc(player.x, player.y, 16, 0, Math.PI * 2);
                 
-                // 팀에 따른 블루/레드 고유 칼라 칩 매핑
                 if (player.team === 'BLUE') {
                     ctx.fillStyle = '#3498db';
                 } else {
@@ -253,12 +314,19 @@
                 ctx.lineWidth = 2;
                 ctx.stroke();
 
-                // 원 한가운데 선수 배번(Number) 인쇄
+                // 선수 등번호(Number) 한가운데 마킹
                 ctx.fillStyle = '#fff';
                 ctx.font = 'bold 12px sans-serif';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
                 ctx.fillText(player.number, player.x, player.y);
+
+                // 관리자 권한을 가진 유저일 경우 머리 위에 특수 별표(★) 표시 렌더링 로직 추가
+                if (player.isAdmin) {
+                    ctx.fillStyle = '#f1c40f';
+                    ctx.font = '14px sans-serif';
+                    ctx.fillText('★', player.x, player.y - 24);
+                }
             }
         }
 

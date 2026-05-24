@@ -377,7 +377,6 @@ const ball = {
         if (team === "BLUE") { scoreBlue += 2; document.getElementById("score1").innerText = scoreBlue; }
         else { scoreRed += 2; document.getElementById("score2").innerText = scoreRed; }
         
-        // 골 스코어 서버 브로드캐스트
         socket.emit("syncScore", { blue: scoreBlue, red: scoreRed });
         this.resetBall();
     },
@@ -500,7 +499,6 @@ canvas.addEventListener("click", e => {
                     p.ownerName = trimmedName;
                     registeredNames.add(trimmedName);
                     
-                    // 선점 상태를 다른 유저 서버망으로 공포
                     socket.emit("syncRegisterOwner", { team: p.team, id: p.id, ownerName: trimmedName });
                 }
             } else {
@@ -574,7 +572,6 @@ function startDefenseMiniGame(defender, attacker) {
 function updateMiniGame() {
     if (gameState !== "MINIGAME") return;
     
-    // 심판 권한 호스트 컴퓨터가 메인 연타 주도 연산 후 공유 처리 진행
     if (isReferee) {
         miniGameTimer--;
         miniGameGauge += 0.35; 
@@ -626,11 +623,9 @@ function update() {
                 
                 if (dx !== 0 || dy !== 0) {
                     p.move(dx, dy);
-                    // 실시간 좌표 연계 위치 송신
                     socket.emit("syncPlayerMove", { team: p.team, id: p.id, x: p.x, y: p.y, angle: p.angle });
                 }
             } else {
-                // 패킷 간섭 최소화를 위해 심판 브라우저에서만 AI 연산을 제어 후 전송 처리
                 if (isReferee) {
                     p.updateAI();
                     socket.emit("syncPlayerMove", { team: p.team, id: p.id, x: p.x, y: p.y, angle: p.angle });
@@ -673,6 +668,54 @@ function gameLoop() {
 }
 
 // Socket 리스너 통합 연동 브릿지
+
+// [핵심] 새로고침 및 중간 입장 시 서버 마스터 데이터를 받아와 동기화
+socket.on("onInitRoomState", (serverRoom) => {
+    gameState = serverRoom.gameState;
+    currentMaxPairs = serverRoom.currentMaxPairs;
+    document.getElementById("matchType").value = currentMaxPairs;
+    
+    // 플레이어 배열 다시 구성
+    initPlayers();
+
+    // 저장되어 있던 캐릭터 선점 이름 복구
+    serverRoom.registeredOwners.forEach(data => {
+        const target = activePlayers.find(p => p.team === data.team && p.id === data.id);
+        if (target) {
+            target.ownerName = data.ownerName;
+            registeredNames.add(data.ownerName);
+        }
+    });
+
+    // 팀 네임 및 점수 복구
+    teamBlueName = serverRoom.teamBlueName;
+    teamRedName = serverRoom.teamRedName;
+    document.getElementById("teamLabel1").innerText = teamBlueName;
+    document.getElementById("teamLabel2").innerText = teamRedName;
+    document.getElementById("teamNameBlueInput").value = teamBlueName;
+    document.getElementById("teamNameRedInput").value = teamRedName;
+
+    scoreBlue = serverRoom.scoreBlue;
+    scoreRed = serverRoom.scoreRed;
+    document.getElementById("score1").innerText = scoreBlue;
+    document.getElementById("score2").innerText = scoreRed;
+
+    // 현재 게임 진행 상황 UI 업데이트
+    if (gameState === "PLAYING" || gameState === "MINIGAME") {
+        statusText.innerText = "[경기 중] 매치 진행 중!";
+        statusText.style.color = "#2ecc71";
+        document.getElementById("startBtn").innerText = "⏸ RESET MATCH";
+        document.getElementById("teamNameBlueInput").disabled = true;
+        document.getElementById("teamNameRedInput").disabled = true;
+    } else {
+        statusText.innerText = isReferee ? "[대기 모드] 세팅 후 시작하세요." : "[관전자 모드] 코드를 입력하세요.";
+        statusText.style.color = "#f1c40f";
+        document.getElementById("startBtn").innerText = "▶ GAME START";
+        document.getElementById("teamNameBlueInput").disabled = !isReferee;
+        document.getElementById("teamNameRedInput").disabled = !isReferee;
+    }
+});
+
 socket.on("onPlayerMove", (data) => {
     const target = activePlayers.find(p => p.team === data.team && p.id === data.id);
     if (target) {

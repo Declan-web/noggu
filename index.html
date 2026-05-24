@@ -3,13 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>5vs5 실시간 멀티플레이 농구 게임 (관전자 모드 포함)</title>
+    <title>실시간 멀티플레이 농구 게임</title>
     <style>
         body {
             margin: 0;
-            background-color: #222;
+            background-color: #2b2b2b;
             color: white;
-            font-family: sans-serif;
+            font-family: 'Malgun Gothic', sans-serif;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -17,239 +17,248 @@
             height: 100vh;
             overflow: hidden;
         }
-        #gameCanvas {
-            border: 4px solid #fff;
-            background-color: #e67e22; 
-        }
-        #lobby {
-            position: absolute;
-            background: rgba(0, 0, 0, 0.9);
-            padding: 30px;
-            border-radius: 10px;
-            text-align: center;
-            border: 2px solid #fff;
-            z-index: 10;
-        }
-        #uiOverlay {
-            position: absolute;
-            top: 20px;
+        /* 상단 설정 바 스타일 지정 */
+        #topBar {
+            background-color: #383838;
+            border: 1px solid #4a4a4a;
+            border-radius: 6px;
+            padding: 8px 20px;
             display: flex;
+            align-items: center;
             gap: 15px;
-            z-index: 5;
+            margin-bottom: 12px;
+            font-size: 14px;
+            width: 764px;
         }
-        input, button, select {
-            padding: 10px;
-            margin: 10px;
-            font-size: 16px;
-            border-radius: 5px;
-            border: none;
+        .divider {
+            color: #555;
         }
-        button {
-            background-color: #3498db;
+        select {
+            background-color: #222;
             color: white;
+            border: 1px solid #666;
+            padding: 4px 10px;
+            border-radius: 4px;
+            outline: none;
             cursor: pointer;
+        }
+        #startBtn {
+            background-color: #f39c12; /* 원래 화면의 주황색 버튼 색상 */
+            color: white;
+            border: none;
+            padding: 6px 14px;
             font-weight: bold;
+            border-radius: 4px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 4px;
         }
-        button:hover {
-            background-color: #2980b9;
-        }
-        .spec-btn {
-            background-color: #e67e22;
-        }
-        .spec-btn:hover {
+        #startBtn:hover {
             background-color: #d35400;
         }
+        #statusText {
+            color: #f1c40f; /* 대기 모드 안내용 노란색 글씨 */
+            font-size: 13px;
+        }
+        /* 게임 경기장 테두리 */
+        #gameCanvas {
+            border: 4px solid #fff;
+            border-radius: 4px;
+            background-color: #d35400; /* 원래의 짙은 오렌지 브라운 코트 바닥색 */
+            box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+            cursor: default;
+        }
+        /* 하단 전광판 스코어 보드 스타일 */
+        #scoreBoard {
+            display: flex;
+            gap: 30px;
+            margin-top: 10px;
+            font-size: 18px;
+            font-weight: bold;
+        }
+        .blue-score { color: #3498db; }
+        .red-score { color: #e74c3c; }
     </style>
     <script src="/socket.io/socket.io.js"></script>
 </head>
 <body>
 
-    <div id="lobby">
-        <h2>🏀 5vs5 농구 게임 입장 🏀</h2>
-        <input type="text" id="nicknameInput" placeholder="닉네임을 입력하세요" maxlength="8"><br>
-        <select id="teamSelect">
-            <option value="A">A팀 (블루)</option>
-            <option value="B">B팀 (레드)</option>
-            <option value="spectator">관전자 모드</option>
-        </select><br>
-        <button id="startBtn">게임 참여하기</button>
+    <div id="topBar">
+        <div>
+            <span class="divider">|</span> &nbsp;인원: 
+            <select id="playerCountSelect">
+                <option value="1">1 VS 1</option>
+                <option value="2">2 VS 2</option>
+                <option value="3">3 VS 3</option>
+                <option value="4">4 VS 4</option>
+                <option value="5">5 VS 5</option>
+            </select>
+        </div>
+        <button id="startBtn">▶ GAME START</button>
+        <div id="statusText">[대기 모드] 캐릭터를 선택하고 게임을 기동하세요.</div>
     </div>
 
-    <div id="uiOverlay" style="display: none;">
-        <button id="toggleSpecBtn" class="spec-btn">관전자 모드 전환</button>
-        <button id="returnLobbyBtn">대기실로 나가기</button>
-    </div>
+    <canvas id="gameCanvas" width="850" height="500"></canvas>
 
-    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <div id="scoreBoard">
+        <div class="blue-score">TEAM BLUE: <span id="blueScoreText">0</span></div>
+        <div class="red-score">TEAM RED: <span id="redScoreText">0</span></div>
+    </div>
 
     <script>
-        // 현재 호스팅 환경(로컬 또는 Render 도메인 주소)에 맞게 자동으로 주소를 찾아 연결합니다.
         const socket = io();
 
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
 
-        const lobby = document.getElementById('lobby');
-        const uiOverlay = document.getElementById('uiOverlay');
-        const nicknameInput = document.getElementById('nicknameInput');
-        const teamSelect = document.getElementById('teamSelect');
+        const playerCountSelect = document.getElementById('playerCountSelect');
         const startBtn = document.getElementById('startBtn');
-        const toggleSpecBtn = document.getElementById('toggleSpecBtn');
-        const returnLobbyBtn = document.getElementById('returnLobbyBtn');
+        const statusText = document.getElementById('statusText');
+        const blueScoreText = document.getElementById('blueScoreText');
+        const redScoreText = document.getElementById('redScoreText');
 
         let myId = null;
         let remotePlayers = {};
-        let isPlaying = false;
+        let gameState = {
+            ball: { x: 425, y: 250 },
+            score: { blue: 0, red: 0 },
+            gameStarted: false
+        };
 
-        // 클라이언트 본인의 초기 상태 구조체 데이터
+        // 내 초기 더미 위치값 데이터 정의
         let myData = {
-            name: '',
-            team: 'A',
-            isSpectator: false,
-            x: 400,
-            y: 300,
-            speed: 5
+            name: 'Chaehee',
+            team: 'BLUE', // 테스트용 기본 팀 설정
+            x: 200,
+            y: 250,
+            number: 1
         };
 
         const keys = {};
 
-        // 게임 참여하기 처리
+        // 1. 인원 설정 교환 연동
+        playerCountSelect.addEventListener('change', (e) => {
+            socket.emit('changeMaxPlayers', e.target.value);
+        });
+
+        // 2. 게임 스타트 버튼 작동
         startBtn.addEventListener('click', () => {
-            const name = nicknameInput.value.trim();
-            if (!name) {
-                alert('닉네임을 입력해 주세요!');
-                return;
-            }
-            
-            myData.name = name;
-            const selectedTeam = teamSelect.value;
-
-            if (selectedTeam === 'spectator') {
-                myData.team = 'spectator';
-                myData.isSpectator = true;
-            } else {
-                myData.team = selectedTeam;
-                myData.isSpectator = false;
-                // 진영에 따른 플레이어 배치 설정
-                myData.x = (myData.team === 'A') ? 200 : 600;
-                myData.y = 300;
-            }
-
-            lobby.style.display = 'none';
-            uiOverlay.style.display = 'flex';
-            isPlaying = true;
-
-            // 기존 관전자 상태 비트를 포함하여 서버에 조인 요청 전송
-            socket.emit('joinGame', {
-                name: myData.name,
-                team: myData.team,
-                isSpectator: myData.isSpectator,
-                x: myData.x,
-                y: myData.y
-            });
-
-            // 버튼 텍스트 초기 셋업
-            toggleSpecBtn.textContent = myData.isSpectator ? "선수로 참전하기" : "관전자 모드 전환";
+            socket.emit('startGame');
         });
 
-        // 인게임 실시간 모드 체인저 버튼 액션
-        toggleSpecBtn.addEventListener('click', () => {
-            if (!isPlaying) return;
-
-            if (!myData.isSpectator) {
-                // 선수 -> 관전자로 전환
-                myData.isSpectator = true;
-                myData.team = 'spectator';
-                toggleSpecBtn.textContent = "선수로 참전하기";
-                socket.emit('changeToSpectator');
-            } else {
-                // 관전자 -> 선수로 복귀 (기본 A팀 배정)
-                myData.isSpectator = false;
-                myData.team = 'A';
-                myData.x = 200;
-                myData.y = 300;
-                toggleSpecBtn.textContent = "관전자 모드 전환";
-                socket.emit('changeToPlayer', {
-                    team: myData.team,
-                    x: myData.x,
-                    y: myData.y
-                });
-            }
+        socket.on('connect', () => {
+            myId = socket.id;
+            // 최초 서버 접속 시 데이터 생성 및 진입 신호 발생
+            socket.emit('joinGame', myData);
         });
 
-        // 대기실로 나가는 버튼 액션
-        returnLobbyBtn.addEventListener('click', () => {
-            location.reload(); // 단순 브라우저 새로고침으로 완전 초기화 및 세션 재시작
+        socket.on('updatePlayers', (serverPlayers) => {
+            remotePlayers = serverPlayers;
         });
 
-        socket.on('connect', () => { myId = socket.id; });
-        socket.on('updatePlayers', (serverPlayers) => { remotePlayers = serverPlayers; });
+        socket.on('updateGameState', (serverState) => {
+            gameState = serverState;
+            playerCountSelect.value = gameState.maxPlayers;
+            blueScoreText.textContent = gameState.score.blue;
+            redScoreText.textContent = gameState.score.red;
+        });
 
+        socket.on('gameStarted', (serverState) => {
+            gameState = serverState;
+            statusText.textContent = "[경기 중] 실시간 매치가 진행 중입니다!";
+            statusText.style.color = "#2ecc71"; // 경기 시작 시 초록색 변경
+        });
+
+        // 조작키 바인딩
         window.addEventListener('keydown', (e) => { keys[e.key] = true; });
         window.addEventListener('keyup', (e) => { keys[e.key] = false; });
 
         function updateMovement() {
-            // 재생 중이 아니거나 관전자 상태일 때는 조작 무효화 (기존 로직 보존)
-            if (!isPlaying || myData.isSpectator) return;
+            if (remotePlayers[myId] && remotePlayers[myId].isSpectator) return;
 
             let moved = false;
+            let speed = 4;
 
-            if (keys['ArrowUp'] || keys['w'] || keys['W']) { myData.y -= myData.speed; moved = true; }
-            if (keys['ArrowDown'] || keys['s'] || keys['S']) { myData.y += myData.speed; moved = true; }
-            if (keys['ArrowLeft'] || keys['a'] || keys['A']) { myData.x -= myData.speed; moved = true; }
-            if (keys['ArrowRight'] || keys['d'] || keys['D']) { myData.x += myData.speed; moved = true; }
+            if (keys['ArrowUp'] || keys['w'] || keys['W']) { myData.y -= speed; moved = true; }
+            if (keys['ArrowDown'] || keys['s'] || keys['S']) { myData.y += speed; moved = true; }
+            if (keys['ArrowLeft'] || keys['a'] || keys['A']) { myData.x -= speed; moved = true; }
+            if (keys['ArrowRight'] || keys['d'] || keys['D']) { myData.x += speed; moved = true; }
 
-            if (myData.x < 15) myData.x = 15;
-            if (myData.x > canvas.width - 15) myData.x = canvas.width - 15;
-            if (myData.y < 15) myData.y = 15;
-            if (myData.y > canvas.height - 15) myData.y = canvas.height - 15;
+            // 경기장 테두리 충돌 한계선 계산
+            if (myData.x < 20) myData.x = 20;
+            if (myData.x > canvas.width - 20) myData.x = canvas.width - 20;
+            if (myData.y < 20) myData.y = 20;
+            if (myData.y > canvas.height - 20) myData.y = canvas.height - 20;
 
             if (moved) {
-                socket.emit('playerMove', {
-                    x: myData.x,
-                    y: myData.y
-                });
+                socket.emit('playerMove', { x: myData.x, y: myData.y });
             }
         }
 
         function drawGame() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // 경기장 기본 중앙선 및 센터서클 선 그리기
-            ctx.strokeStyle = "rgba(255, 255, 255, 0.5)";
-            ctx.lineWidth = 3;
+            // [맵 디자인] 경기장 내부 흰색 선 작도 (원래 양식 반영)
+            ctx.strokeStyle = "rgba(255, 255, 255, 0.6)";
+            ctx.lineWidth = 2;
+
+            // 1. 중앙선 및 정중앙 센터 서클
             ctx.beginPath();
             ctx.moveTo(canvas.width / 2, 0);
             ctx.lineTo(canvas.width / 2, canvas.height);
             ctx.stroke();
+
             ctx.beginPath();
-            ctx.arc(canvas.width / 2, canvas.height / 2, 70, 0, Math.PI * 2);
+            ctx.arc(canvas.width / 2, canvas.height / 2, 60, 0, Math.PI * 2);
             ctx.stroke();
 
-            // 접속 데이터 순회 렌더링
+            // 2. 왼쪽 영역 페널티 박스 구획 및 골라인 서클
+            ctx.strokeRect(0, 150, 80, 200);
+            ctx.beginPath();
+            ctx.arc(80, 250, 40, -Math.PI/2, Math.PI/2);
+            ctx.stroke();
+
+            // 3. 오른쪽 영역 페널티 박스 구획 및 골라인 서클
+            ctx.strokeRect(canvas.width - 80, 150, 80, 200);
+            ctx.beginPath();
+            ctx.arc(canvas.width - 80, 250, 40, Math.PI/2, -Math.PI/2);
+            ctx.stroke();
+
+            // [오브젝트 렌더링] 중앙 정밀 농구공 배치 그리기
+            ctx.beginPath();
+            ctx.arc(gameState.ball.x, gameState.ball.y, 10, 0, Math.PI * 2);
+            ctx.fillStyle = "#e67e22";
+            ctx.fill();
+            ctx.strokeStyle = "#000";
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+
+            // [유저 모델링] 원형 선수 칩 및 백넘버 텍스트 인쇄
             for (let id in remotePlayers) {
                 const player = remotePlayers[id];
-
-                // 관전자는 경기장 바닥에 원형 캐릭터 모델을 렌더링하지 않음 (기존 시스템 반영)
-                if (player.isSpectator || player.team === 'spectator') continue;
+                if (player.isSpectator) continue;
 
                 ctx.beginPath();
-                ctx.arc(player.x, player.y, 15, 0, Math.PI * 2);
+                ctx.arc(player.x, player.y, 16, 0, Math.PI * 2);
                 
-                if (player.team === 'A') {
-                    ctx.fillStyle = '#3498db'; 
+                // 팀에 따른 블루/레드 고유 칼라 칩 매핑
+                if (player.team === 'BLUE') {
+                    ctx.fillStyle = '#3498db';
                 } else {
-                    ctx.fillStyle = '#e74c3c'; 
+                    ctx.fillStyle = '#e74c3c';
                 }
                 ctx.fill();
                 ctx.strokeStyle = '#fff';
                 ctx.lineWidth = 2;
                 ctx.stroke();
 
+                // 원 한가운데 선수 배번(Number) 인쇄
                 ctx.fillStyle = '#fff';
-                ctx.font = '12px sans-serif';
+                ctx.font = 'bold 12px sans-serif';
                 ctx.textAlign = 'center';
-                ctx.fillText(player.name, player.x, player.y - 22);
+                ctx.textBaseline = 'middle';
+                ctx.fillText(player.number, player.x, player.y);
             }
         }
 

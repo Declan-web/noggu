@@ -1,71 +1,59 @@
-// server.js
 const express = require('express');
 const app = express();
 const http = require('http').createServer(app);
 const io = require('socket.io')(http, {
-    cors: { origin: "*" } // 다른 주소에서의 접근을 허용 (CORS 차단 방지)
+    cors: {
+        origin: "*",
+        methods: ["GET", "POST"]
+    }
 });
 
-// HTML 파일들이 위치한 폴더를 지정 (기존 index.html이 있는 위치)
-app.use(express.static(__dirname));
+// Render 배포 환경의 포트를 자동으로 잡거나, 없으면 기본 3000번 포트를 사용하도록 설정
+const PORT = process.env.PORT || 3000;
 
-// 실시간으로 접속한 유저들의 좌표와 정보를 저장할 객체
-let onlineUsers = {};
+// 사용자가 사이트에 접속했을 때 첫 화면으로 index.html 파일을 보내주는 경로 설정 (Not Found 해결)
+app.get('/', (req, res) => {
+    res.sendFile(__dirname + '/index.html');
+});
+
+// 실시간 접속 유저 데이터 관리 객체
+let players = {};
 
 io.on('connection', (socket) => {
-    console.log(`📡 새 유저 접속함! (ID: ${socket.id})`);
+    console.log(`유저 접속됨: ${socket.id}`);
 
-    // 1. 유저가 대기실에서 캐릭터를 선점했을 때 호출됨
-    socket.on('join_player', (data) => {
-        onlineUsers[socket.id] = {
-            playerId: data.id,       // 캐릭터 번호 (1~5)
-            team: data.team,         // BLUE or RED
-            ownerName: data.ownerName, // 유저 이름
-            x: data.x,
-            y: data.y,
-            angle: data.angle
+    // 새로운 플레이어가 닉네임을 입력하고 게임에 참여했을 때
+    socket.on('joinGame', (playerData) => {
+        players[socket.id] = {
+            id: socket.id,
+            name: playerData.name,
+            team: playerData.team,
+            x: playerData.x || 400,
+            y: playerData.y || 300
         };
-        // 현재 접속해 있는 모든 유저들에게 갱신된 명단 전송
-        io.emit('sync_lobby', onlineUsers);
+        // 현재 접속 중인 모든 플레이어들에게 갱신된 명단 전송
+        io.emit('updatePlayers', players);
     });
 
-    // 2. 누군가 방향키로 캐릭터를 움직일 때 실시간으로 중계
-    socket.on('move_player', (data) => {
-        if (onlineUsers[socket.id]) {
-            onlineUsers[socket.id].x = data.x;
-            onlineUsers[socket.id].y = data.y;
-            onlineUsers[socket.id].angle = data.angle;
-            
-            // 신호를 보낸 사람을 제외한 '다른 모든 유저'들에게 이 좌표를 뿌림
-            socket.broadcast.emit('update_remote_player', {
-                socketId: socket.id,
-                x: data.x,
-                y: data.y,
-                angle: data.angle
-            });
+    // 플레이어가 방향키나 WASD로 움직였을 때 실시간 좌표 동기화
+    socket.on('playerMove', (moveData) => {
+        if (players[socket.id]) {
+            players[socket.id].x = moveData.x;
+            players[socket.id].y = moveData.y;
+            // 다른 모든 접속자들에게 변경된 위치 정보 전달
+            socket.broadcast.emit('updatePlayers', players);
         }
     });
 
-    // 3. 공의 물리 상태(위치, 속도, 소유자) 실시간 중계
-    socket.on('sync_ball', (ballData) => {
-        socket.broadcast.emit('update_ball_state', ballData);
-    });
-
-    // 4. 디펜스 미니게임 트리거 중계
-    socket.on('trigger_defense', (data) => {
-        socket.broadcast.emit('start_defense_match', data);
-    });
-
-    // 5. 접속 종료 처리
+    // 유저가 브라우저 창을 닫거나 나갔을 때 명단에서 제거
     socket.on('disconnect', () => {
-        console.log(`❌ 유저 나감 (ID: ${socket.id})`);
-        delete onlineUsers[socket.id];
-        io.emit('sync_lobby', onlineUsers);
+        console.log(`유저 나감: ${socket.id}`);
+        delete players[socket.id];
+        io.emit('updatePlayers', players);
     });
 });
 
-// 서버 포트 설정 (Render 배포를 위해 process.env.PORT 지원)
-const PORT = process.env.PORT || 3000;
+// 서버 가동 및 시작 로그 출력
 http.listen(PORT, () => {
-    console.log(`🚀 멀티플레이 서버가 http://localhost:${PORT} 에서 작동 중입니다!`);
+    console.log(`🚀 멀티플레이 서버가 작동 중입니다!`);
 });

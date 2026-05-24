@@ -8,52 +8,67 @@ const io = require('socket.io')(http, {
     }
 });
 
-// 1. Render 배포 환경의 동적 포트를 자동으로 잡거나, 로컬용 3000번 포트를 사용하도록 설정
 const PORT = process.env.PORT || 3000;
 
-// 2. [가장 중요] Render에 접속했을 때 내 index.html 파일을 메인 화면으로 띄워주는 핵심 연결 코드 (Not Found 에러 해결)
+// Render 접속 시 index.html 파일 매칭
 app.get('/', (req, res) => {
     res.sendFile(__dirname + '/index.html');
 });
 
-// 실시간 플레이어 명단 데이터 객체
 let players = {};
+let gameState = {
+    ball: { x: 425, y: 250, vx: 0, vy: 0 },
+    score: { blue: 0, red: 0 },
+    gameStarted: false,
+    maxPlayers: 1
+};
 
 io.on('connection', (socket) => {
-    console.log(`유저 접속됨: ${socket.id}`);
+    console.log(`유저 접속: ${socket.id}`);
 
-    // 사용자가 대기실에서 '게임 참여하기'를 눌렀을 때
     socket.on('joinGame', (playerData) => {
+        // 새로 접속한 유저를 반대 진영에 배치하기 위한 기초 카운트 분기 로직
+        const playerCount = Object.keys(players).length;
+        const assignedTeam = (playerCount % 2 === 0) ? 'BLUE' : 'RED';
+
         players[socket.id] = {
             id: socket.id,
-            name: playerData.name,
-            team: playerData.team,
-            x: playerData.x,
-            y: playerData.y
+            name: playerData.name || 'Player',
+            team: assignedTeam,
+            x: assignedTeam === 'BLUE' ? 200 : 650,
+            y: 250,
+            number: (assignedTeam === 'BLUE') ? Math.floor(playerCount/2) + 1 : Math.floor(playerCount/2) + 1
         };
-        // 현재 접속 중인 전원에게 플레이어 명단 최신화
         io.emit('updatePlayers', players);
+        io.emit('updateGameState', gameState);
     });
 
-    // 플레이어가 방향키나 WASD로 움직일 때 실시간 좌표 동기화
+    socket.on('changeMaxPlayers', (val) => {
+        gameState.maxPlayers = parseInt(val);
+        io.emit('updateGameState', gameState);
+    });
+
+    socket.on('startGame', () => {
+        gameState.gameStarted = true;
+        gameState.ball = { x: 425, y: 250, vx: 0, vy: 0 };
+        io.emit('gameStarted', gameState);
+    });
+
     socket.on('playerMove', (moveData) => {
         if (players[socket.id]) {
             players[socket.id].x = moveData.x;
             players[socket.id].y = moveData.y;
-            // 나를 제외한 다른 사람들에게 실시간 위치 브로드캐스팅
             socket.broadcast.emit('updatePlayers', players);
         }
     });
 
-    // 유저가 브라우저를 닫거나 접속을 끊었을 때 명단에서 제거
     socket.on('disconnect', () => {
-        console.log(`유저 나감: ${socket.id}`);
+        console.log(`유저 퇴장: ${socket.id}`);
         delete players[socket.id];
         io.emit('updatePlayers', players);
     });
 });
 
-// 3. 서버 실행 포트를 변수 PORT 값으로 지정
 http.listen(PORT, () => {
-    console.log(`🚀 서버가 작동 중입니다! 포트번호: ${PORT}`);
+    console.log(`서버 작동 중. 포트: ${PORT}`);
 });

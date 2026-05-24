@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>온라인 조작형 5vs5 농구 게임</title>
+    <style>
+        body {
+            margin: 0;
+            background-color: #222;
+            color: #fff;
+            font-family: 'Arial', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+        #lobby {
+            margin-bottom: 15px;
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            background: #333;
+            padding: 10px 20px;
+            border-radius: 8px;
+            border: 1px solid #555;
+            flex-wrap: wrap;
+        }
+        select, button, input {
+            padding: 8px 12px;
+            font-size: 14px;
+            font-weight: bold;
+            border-radius: 4px;
+            border: none;
+        }
+        input[type="password"] {
+            background-color: #444;
+            color: #fff;
+            border: 1px solid #666;
+            width: 80px;
+            text-align: center;
+        }
+        input[type="text"] {
+            background-color: #444;
+            color: #fff;
+            border: 1px solid #666;
+            width: 100px;
+        }
+        select {
+            background-color: #444;
+            color: #fff;
+            border: 1px solid #666;
+        }
+        button {
+            background-color: #f39c12;
+            color: #fff;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #d35400;
+        }
+        button:disabled, select:disabled, input:disabled {
+            background-color: #555;
+            color: #888;
+            cursor: not-allowed;
+        }
+        #gameContainer {
+            position: relative;
+            box-shadow: 0 0 25px rgba(0,0,0,0.7);
+        }
+        canvas {
+            background-color: #d35400;
+            border: 4px solid #fff;
+            display: block;
+            cursor: pointer;
+        }
+        #cutIn {
+            position: absolute;
+            top: 40%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0);
+            font-size: 70px;
+            font-weight: 900;
+            color: #e74c3c;
+            text-shadow: -4px -4px 0 #fff, 4px -4px 0 #fff, -4px 4px 0 #fff, 4px 4px 0 #fff, 0px 8px 10px rgba(0,0,0,0.5);
+            font-style: italic;
+            pointer-events: none;
+            transition: transform 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            z-index: 10;
+        }
+        #cutIn.active {
+            transform: translate(-50%, -50%) scale(1);
+        }
+        #miniGameUI {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.8);
+            padding: 15px 25px;
+            border-radius: 10px;
+            border: 2px solid #fff;
+            text-align: center;
+            display: none;
+            z-index: 5;
+        }
+        .progress-bar {
+            width: 300px;
+            height: 25px;
+            background-color: #555;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-top: 10px;
+            border: 1px solid #fff;
+        }
+        #progress {
+            width: 50%;
+            height: 100%;
+            background: linear-gradient(90deg, #3498db, #e74c3c);
+        }
+        #ui {
+            margin-top: 10px;
+            font-size: 20px;
+            font-weight: bold;
+            display: flex;
+            gap: 50px;
+        }
+        .controls-info {
+            margin-top: 8px;
+            font-size: 13px;
+            color: #bbb;
+            text-align: center;
+            background: #333;
+            padding: 10px 40px;
+            border-radius: 5px;
+            border: 1px solid #444;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="lobby">
+        <div id="refereeZone">
+            <label for="refKey">심판 코드: </label>
+            <input type="password" id="refKey" placeholder="코드">
+            <button onclick="authReferee()" id="authBtn">인증</button>
+        </div>
+        
+        <span style="color:#555;">|</span>
+
+        <label>팀명 세팅: </label>
+        <input type="text" id="teamNameBlueInput" value="TEAM BLUE" placeholder="블루팀명" disabled>
+        <input type="text" id="teamNameRedInput" value="TEAM RED" placeholder="레드팀명" disabled>
+
+        <label for="matchType">인원: </label>
+        <select id="matchType" onchange="changeMatchType()" disabled>
+            <option value="1">1 VS 1</option>
+            <option value="2">2 VS 2</option>
+            <option value="3">3 VS 3</option>
+            <option value="4">4 VS 4</option>
+            <option value="5" selected>5 VS 5</option>
+        </select>
+        <button id="startBtn" onclick="startGame()" disabled>▶ GAME START</button>
+        <span id="statusText" style="color: #f1c40f; margin-left: 5px;">[관전자 모드] 코드를 입력하세요.</span>
+    </div>
+    
+    <div id="gameContainer">
+        <div id="cutIn">디펜스!!</div>
+        <div id="miniGameUI">
+            <div id="miniGameTitle" style="font-weight:bold; font-size:16px;">🔥 연타 매치: 스페이스바 연타!! 🔥</div>
+            <div class="progress-bar">
+                <div id="progress"></div>
+            </div>
+            <div id="miniGameVS" style="font-size:12px; margin-top:5px; color:#ccc;">수비수 VS 공격수</div>
+        </div>
+        <canvas id="gameCanvas" width="1000" height="500"></canvas>
+    </div>
+    
+    <div id="ui">
+        <div style="color: #3498db;"><span id="teamLabel1">TEAM BLUE</span>: <span id="score1">0</span></div>
+        <div style="color: #e74c3c;"><span id="teamLabel2">TEAM RED</span>: <span id="score2">0</span></div>
+    </div>
+
+    <div class="controls-info">
+        <strong>🎮 온라인 공통 조작 가이드</strong> (모든 유저는 개별 화면에서 동일한 조작계를 사용합니다)<br>
+        <span style="color: #f1c40f;">이동: 방향키 (↑, ↓, ←, →) | 슛: Spacebar | 패스: C | 디펜스: X (쿨타임 7초)</span>
+    </div>
+
+<script>
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+const cutIn = document.getElementById("cutIn");
+const miniGameUI = document.getElementById("miniGameUI");
+const progressBar = document.getElementById("progress");
+const statusText = document.getElementById("statusText");
+
+let scoreBlue = 0;
+let scoreRed = 0;
+let teamBlueName = "TEAM BLUE";
+let teamRedName = "TEAM RED";
+
+let gameState = "SETUP"; 
+let miniGameGauge = 50;    
+let miniGameTimer = 0;
+let activeDefender = null;
+let activeAttacker = null;
+
+let currentMaxPairs = 5; 
+let isReferee = false; 
+
+// 유저 중복 선점 방지용 세트
+const registeredNames = new Set();
+
+const court = {
+    width: canvas.width,
+    height: canvas.height,
+    leftGoal: { x: 50, y: 250, radius: 20 },
+    rightGoal: { x: 950, y: 250, radius: 20 }
+};
+
+// 온라인 단일 조작키 구조 정의 (모든 클라이언트가 공통으로 파싱할 구조)
+const onlineScheme = { up: 'arrowup', down: 'arrowdown', left: 'arrowleft', right: 'arrowright', shoot: ' ', pass: 'c', def: 'x' };
+
+class Player {
+    constructor(x, y, team, id, spawnIndex) {
+        this.x = x;
+        this.y = y;
+        this.team = team; 
+        this.id = id;
+        this.spawnIndex = spawnIndex;
+        this.radius = 16;
+        this.speed = 3.5;
+        this.color = team === "BLUE" ? "#3498db" : "#e74c3c";
+        
+        this.ownerName = null;     
+        this.angle = team === "BLUE" ? 0 : Math.PI; 
+
+        this.lastDefenseTime = 0; 
+        this.defenseCooldown = 7000; 
+    }
+
+    draw() {
+        const now = Date.now();
+        const timePassed = now - this.lastDefenseTime;
+        const isCooling = timePassed < this.defenseCooldown;
+
+        // 1. 고밀도 조준선 그리기
+        if (this.ownerName) {
+            ctx.save();
+            ctx.strokeStyle = isCooling ? "rgba(180, 180, 180, 0.4)" : "rgba(255, 242, 0, 0.75)";
+            ctx.lineWidth = 2.5;
+            ctx.setLineDash([4, 4]);
+            ctx.beginPath();
+            ctx.moveTo(this.x, this.y);
+            ctx.lineTo(this.x + Math.cos(this.angle) * 45, this.y + Math.sin(this.angle) * 45);
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        // 2. 캐릭터 본체 그리기
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fillStyle = this.color;
+        ctx.fill();
+        ctx.lineWidth = this.ownerName ? 4 : 1.5;
+        ctx.strokeStyle = this.ownerName ? "#f1c40f" : "#fff"; 
+        ctx.stroke();
+        ctx.closePath();
+
+        // 3. 내부 고유 등번호 표시
+        ctx.fillStyle = "#fff";
+        ctx.font = "bold 10px sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(this.id, this.x, this.y);
+
+        // 4. 머리 위 정보 표시
+        if (this.ownerName) {
+            ctx.fillStyle = "#fff";
+            ctx.font = "bold 11px sans-serif";
+            ctx.fillText(this.ownerName, this.x, this.y - this.radius - 8);
+
+            if (isCooling) {
+                const remaining = Math.ceil((this.defenseCooldown - timePassed) / 1000);
+                ctx.fillStyle = "#ff4d4d";
+                ctx.font = "9px sans-serif";
+                ctx.fillText(`${remaining}s`, this.x, this.y + this.radius + 12);
+            }
+        }
+    }
+
+    move(dx, dy) {
+        this.x += dx * this.speed;
+        this.y += dy * this.speed;
+        this.x = Math.max(this.radius, Math.min(court.width - this.radius, this.x));
+        this.y = Math.max(this.radius, Math.min(court.height - this.radius, this.y));
+
+        if (dx !== 0 || dy !== 0) {
+            this.angle = Math.atan2(dy, dx);
+        }
+    }
+
+    updateAI() {
+        if (gameState !== "PLAYING" || this.ownerName) return;
+
+        let dx = 0, dy = 0;
+        if (ball.holder === this) {
+            const targetGoal = this.team === "BLUE" ? court.rightGoal : court.leftGoal;
+            const distToGoal = Math.hypot(targetGoal.x - this.x, targetGoal.y - this.y);
+            if (distToGoal > 160) {
+                dx = targetGoal.x - this.x;
+                dy = targetGoal.y - this.y;
+            } else if (Math.random() < 0.02) {
+                shootAction(this);
+            }
+        } else {
+            dx = ball.x - this.x;
+            dy = ball.y - this.y;
+        }
+
+        if (dx !== 0 || dy !== 0) {
+            const length = Math.hypot(dx, dy);
+            this.move(dx / length, dy / length);
+        }
+    }
+}
+
+const ball = {
+    x: 500,
+    y: 250,
+    radius: 9,
+    vx: 0,
+    vy: 0,
+    holder: null,
+    isFlying: false,
+
+    draw() {
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fillStyle = "#e67e22";
+        ctx.fill();
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = "#000";
+        ctx.stroke();
+        ctx.closePath();
+    },
+
+    update() {
+        if (gameState !== "PLAYING") return;
+
+        if (this.holder) {
+            const dribbleY = Math.sin(Date.now() * 0.012) * 6;
+            this.x = this.holder.x + Math.cos(this.holder.angle) * 14;
+            this.y = this.holder.y + Math.sin(this.holder.angle) * 14 + dribbleY;
+        } else if (this.isFlying) {
+            this.x += this.vx;
+            this.y += this.vy;
+            this.vx *= 0.98;
+            this.vy *= 0.98;
+
+            const distToRight = Math.hypot(this.x - court.rightGoal.x, this.y - court.rightGoal.y);
+            const distToLeft = Math.hypot(this.x - court.leftGoal.x, this.y - court.leftGoal.y);
+
+            if (distToRight < court.rightGoal.radius) this.scoreGoal("BLUE");
+            if (distToLeft < court.leftGoal.radius) this.scoreGoal("RED");
+
+            if (Math.abs(this.vx) < 0.3 && Math.abs(this.vy) < 0.3) this.isFlying = false;
+        }
+
+        if (this.x < this.radius || this.x > court.width - this.radius) this.vx *= -1;
+        if (this.y < this.radius || this.y > court.height - this.radius) this.vy *= -1;
+        this.x = Math.max(this.radius, Math.min(court.width - this.radius, this.x));
+        this.y = Math.max(this.radius, Math.min(court.height - this.radius, this.y));
+    },
+
+    scoreGoal(team) {
+        this.isFlying = false;
+        if (team === "BLUE") { scoreBlue += 2; document.getElementById("score1").innerText = scoreBlue; }
+        else { scoreRed += 2; document.getElementById("score2").innerText = scoreRed; }
+        this.resetBall();
+    },
+
+    resetBall() {
+        this.x = 500;
+        this.y = 250;
+        this.vx = 0;
+        this.vy = 0;
+        this.holder = null;
+    }
+};
+
+const allSpawnPositions = {
+    BLUE: [ {x:200, y:250}, {x:320, y:130}, {x:320, y:370}, {x:120, y:160}, {x:120, y:340} ],
+    RED:  [ {x:800, y:250}, {x:680, y:130}, {x:680, y:370}, {x:880, y:160}, {x:880, y:340} ]
+};
+
+let activePlayers = [];
+
+function initPlayers() {
+    activePlayers = [];
+    registeredNames.clear();
+    ball.resetBall();
+
+    for(let i = 0; i < currentMaxPairs; i++) {
+        let bPos = allSpawnPositions.BLUE[i];
+        activePlayers.push(new Player(bPos.x, bPos.y, "BLUE", i+1, i));
+
+        let rPos = allSpawnPositions.RED[i];
+        activePlayers.push(new Player(rPos.x, rPos.y, "RED", i+1, i));
+    }
+}
+
+function authReferee() {
+    const inputKey = document.getElementById("refKey").value;
+    if (inputKey === "KEY") {
+        isReferee = true;
+        alert("심판 권한 인증 성공!");
+        
+        document.getElementById("matchType").disabled = false;
+        document.getElementById("startBtn").disabled = false;
+        document.getElementById("teamNameBlueInput").disabled = false;
+        document.getElementById("teamNameRedInput").disabled = false;
+        document.getElementById("refereeZone").style.display = "none"; 
+        
+        if(gameState === "SETUP") {
+            statusText.innerText = "[대기 모드] 세팅 후 시작하세요.";
+        }
+    } else {
+        alert("잘못된 심판 코드입니다!");
+    }
+}
+
+function changeMatchType() {
+    if (!isReferee) return;
+    if (gameState !== "SETUP") return;
+    currentMaxPairs = parseInt(document.getElementById("matchType").value);
+    initPlayers();
+}
+
+function startGame() {
+    if (!isReferee) return;
+    
+    document.getElementById("startBtn").blur();
+    document.getElementById("matchType").blur();
+
+    if (gameState === "SETUP") {
+        teamBlueName = document.getElementById("teamNameBlueInput").value.trim() || "TEAM BLUE";
+        teamRedName = document.getElementById("teamNameRedInput").value.trim() || "TEAM RED";
+        
+        document.getElementById("teamLabel1").innerText = teamBlueName;
+        document.getElementById("teamLabel2").innerText = teamRedName;
+
+        document.getElementById("teamNameBlueInput").disabled = true;
+        document.getElementById("teamNameRedInput").disabled = true;
+
+        gameState = "PLAYING";
+        statusText.innerText = "[경기 중] 매치 진행 중!";
+        statusText.style.color = "#2ecc71";
+        document.getElementById("startBtn").innerText = "⏸ RESET MATCH";
+    } else {
+        gameState = "SETUP";
+        statusText.innerText = "[대기 모드] 세팅 후 시작하세요.";
+        statusText.style.color = "#f1c40f";
+        document.getElementById("startBtn").innerText = "▶ GAME START";
+        
+        document.getElementById("teamNameBlueInput").disabled = false;
+        document.getElementById("teamNameRedInput").disabled = false;
+
+        scoreBlue = 0; scoreRed = 0;
+        document.getElementById("score1").innerText = 0;
+        document.getElementById("score2").innerText = 0;
+        initPlayers();
+    }
+}
+
+function shootAction(player) {
+    ball.holder = null;
+    ball.isFlying = true;
+    const power = 14;
+    ball.vx = Math.cos(player.angle) * power;
+    ball.vy = Math.sin(player.angle) * power;
+}
+
+function passAction(player) {
+    ball.holder = null;
+    ball.isFlying = true;
+    const power = 11;
+    ball.vx = Math.cos(player.angle) * power;
+    ball.vy = Math.sin(player.angle) * power;
+}
+
+canvas.addEventListener("click", e => {
+    if (gameState !== "SETUP") {
+        alert("대기 모드에서만 팀원을 할당합니다.");
+        return;
+    }
+
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+
+    activePlayers.forEach(p => {
+        const dist = Math.hypot(p.x - mouseX, p.y - mouseY);
+        if (dist < p.radius + 10) {
+            if (!p.ownerName) {
+                const name = prompt(`[${p.team === "BLUE" ? "블루" : "레드"} ${p.id}번] 지정할 유저의 이름을 입력하세요:`);
+                if (name && name.trim() !== "") {
+                    const trimmedName = name.trim();
+                    
+                    if (registeredNames.has(trimmedName)) {
+                        alert(`'${trimmedName}' 유저는 이미 한 명의 캐릭터를 선점했습니다. 인당 한 개씩만 가능합니다.`);
+                        return;
+                    }
+
+                    p.ownerName = trimmedName;
+                    registeredNames.add(trimmedName);
+                }
+            } else {
+                alert(`이미 선점된 캐릭터입니다.`);
+            }
+        }
+    });
+});
+
+const keys = {};
+window.addEventListener("keydown", e => {
+    if (e.key === " ") e.preventDefault(); 
+
+    const key = e.key.toLowerCase();
+    keys[key] = true;
+    
+    if (gameState === "MINIGAME" && e.key === " ") {
+        miniGameGauge -= 5;
+        if (miniGameGauge < 0) miniGameGauge = 0;
+        return;
+    }
+
+    if (gameState === "PLAYING") {
+        activePlayers.forEach(p => {
+            // 온라인 환경: 선점된 유저 캐릭터라면 누구나 이 공통 단일 키셋으로 전송/제어됨
+            if (p.ownerName) {
+                if (ball.holder === p) {
+                    if (key === onlineScheme.shoot) shootAction(p);
+                    if (key === onlineScheme.pass) passAction(p);
+                }
+                if (key === onlineScheme.def) checkDefenseTrigger(p);
+            }
+        });
+    }
+});
+window.addEventListener("keyup", e => { keys[e.key.toLowerCase()] = false; });
+
+function checkDefenseTrigger(defender) {
+    const now = Date.now();
+    if (now - defender.lastDefenseTime < defender.defenseCooldown) {
+        return; 
+    }
+
+    if (ball.holder && ball.holder.team !== defender.team) {
+        const dist = Math.hypot(defender.x - ball.holder.x, defender.y - ball.holder.y);
+        if (dist < defender.radius + ball.holder.radius + 25) {
+            defender.lastDefenseTime = now; 
+            startDefenseMiniGame(defender, ball.holder);
+        }
+    }
+}
+
+function startDefenseMiniGame(defender, attacker) {
+    gameState = "MINIGAME";
+    activeDefender = defender;
+    activeAttacker = attacker;
+    miniGameGauge = 50; 
+    miniGameTimer = 150; 
+
+    const defName = defender.ownerName || `${defender.team === "BLUE" ? teamBlueName : teamRedName} ${defender.id}`;
+    const attName = attacker.ownerName || `${attacker.team === "BLUE" ? teamBlueName : teamRedName} ${attacker.id}`;
+    document.getElementById("miniGameVS").innerText = `🛡️ 수비수 [${defName}] VS 🏀 공격수 [${attName}]`;
+
+    cutIn.classList.add("active");
+    setTimeout(() => {
+        cutIn.classList.remove("active");
+        miniGameUI.style.display = "block";
+    }, 600);
+}
+
+function updateMiniGame() {
+    if (gameState !== "MINIGAME") return;
+    miniGameTimer--;
+    
+    miniGameGauge += 0.35; 
+    if (miniGameGauge > 100) miniGameGauge = 100;
+
+    progressBar.style.width = `${miniGameGauge}%`;
+
+    if (miniGameGauge <= 5) endMiniGame(true);
+    else if (miniGameGauge >= 95 || miniGameTimer <= 0) endMiniGame(false);
+}
+
+function endMiniGame(isDefenderWin) {
+    gameState = "PLAYING";
+    miniGameUI.style.display = "none";
+
+    if (isDefenderWin) {
+        ball.holder = activeDefender;
+    } else {
+        const angle = Math.atan2(activeDefender.y - activeAttacker.y, activeDefender.x - activeAttacker.x);
+        activeDefender.x += Math.cos(angle) * 50;
+        activeDefender.y += Math.sin(angle) * 50;
+    }
+    activeDefender = null;
+    activeAttacker = null;
+}
+
+function checkBallAcquisition() {
+    if (gameState !== "PLAYING" || ball.holder || ball.isFlying) return;
+
+    activePlayers.forEach(p => {
+        const dist = Math.hypot(ball.x - p.x, ball.y - p.y);
+        if (dist < p.radius + ball.radius) {
+            ball.holder = p;
+        }
+    });
+}
+
+function update() {
+    if (gameState === "PLAYING") {
+        activePlayers.forEach(p => {
+            if (p.ownerName) {
+                let dx = 0, dy = 0;
+                if (keys[onlineScheme.up]) dy = -1;
+                if (keys[onlineScheme.down]) dy = 1;
+                if (keys[onlineScheme.left]) dx = -1;
+                if (keys[onlineScheme.right]) dx = 1;
+                p.move(dx, dy);
+            } else {
+                p.updateAI();
+            }
+        });
+
+        ball.update();
+        checkBallAcquisition();
+    } else if (gameState === "MINIGAME") {
+        updateMiniGame();
+    }
+}
+
+function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    ctx.strokeStyle = "rgba(255,255,255,0.4)";
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(500, 0); ctx.lineTo(500, 500); ctx.stroke();
+    ctx.beginPath(); ctx.arc(500, 250, 70, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeRect(0, 150, 80, 200);
+    ctx.strokeRect(920, 150, 80, 200);
+
+    ctx.strokeStyle = "#fff";
+    ctx.beginPath(); ctx.arc(court.leftGoal.x, court.leftGoal.y, court.leftGoal.radius, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(court.rightGoal.x, court.rightGoal.y, court.rightGoal.radius, 0, Math.PI * 2); ctx.stroke();
+
+    activePlayers.forEach(p => p.draw());
+    ball.draw();
+}
+
+function gameLoop() {
+    update();
+    draw();
+    requestAnimationFrame(gameLoop);
+}
+
+initPlayers();
+gameLoop();
+</script>
+</body>
+</html>

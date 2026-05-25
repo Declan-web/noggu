@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>온라인 조작형 5vs5 농구 게임</title>
+    <title>농구 한 판이면 땡</title>
     <style>
         body {
             margin: 0;
@@ -134,16 +134,6 @@
             display: flex;
             gap: 50px;
         }
-        .controls-info {
-            margin-top: 8px;
-            font-size: 13px;
-            color: #bbb;
-            text-align: center;
-            background: #333;
-            padding: 10px 40px;
-            border-radius: 5px;
-            border: 1px solid #444;
-        }
         #adminSkillZone {
             display: none;
             align-items: center;
@@ -152,6 +142,14 @@
             padding: 3px 8px;
             border-radius: 4px;
             border: 1px solid #666;
+        }
+        /* 일시정지 버튼 스타일 추가 */
+        #pauseBtn {
+            background-color: #34495e;
+            color: #fff;
+        }
+        #pauseBtn:hover {
+            background-color: #2c3e50;
         }
     </style>
     <script src="/socket.io/socket.io.js"></script>
@@ -166,7 +164,7 @@
         </div>
         
         <div id="adminSkillZone">
-            <label>📊 경기력 관리:</label>
+            <label>경기력 관리:</label>
             <select id="adminTargetPlayer" onchange="loadTargetSkillLevel()"></select>
             <input type="number" id="adminSkillInput" min="5.0" max="9.9" step="0.1" value="5.0">
             <button onclick="updatePlayerSkill()">적용</button>
@@ -174,7 +172,7 @@
 
         <span style="color:#555;">|</span>
 
-        <label>팀명 세팅: </label>
+        <label>팀명: </label>
         <input type="text" id="teamNameBlueInput" value="TEAM BLUE" placeholder="블루팀명" disabled>
         <input type="text" id="teamNameRedInput" value="TEAM RED" placeholder="레드팀명" disabled>
 
@@ -187,6 +185,7 @@
             <option value="5" selected>5 VS 5</option>
         </select>
         <button id="startBtn" onclick="startGame()" disabled>▶ GAME START</button>
+        <button id="pauseBtn" onclick="togglePause()" disabled>⏸ PAUSE</button>
         <span id="statusText" style="color: #f1c40f; margin-left: 5px;">[관전자 모드] 코드를 입력하세요.</span>
     </div>
     
@@ -207,11 +206,6 @@
         <div style="color: #e74c3c;"><span id="teamLabel2">TEAM RED</span>: <span id="score2">0</span></div>
     </div>
 
-    <div class="controls-info">
-        <strong>🎮 온라인 공통 조작 가이드</strong> (모든 유저는 개별 화면에서 동일한 조작계를 사용합니다)<br>
-        <span style="color: #f1c40f;">이동: 방향키 (↑, ↓, ←, →) | 공 줍기: Enter | 슛: Spacebar | 패스: C | 디펜스: X (쿨타임 7초)</span>
-    </div>
-
 <script>
 const socket = io();
 
@@ -221,8 +215,8 @@ const cutIn = document.getElementById("cutIn");
 const miniGameUI = document.getElementById("miniGameUI");
 const progressBar = document.getElementById("progress");
 const statusText = document.getElementById("statusText");
+const pauseBtn = document.getElementById("pauseBtn");
 
-// 심판 권한 판별 변수 선언 누락 버그 해결
 let isReferee = false; 
 
 let scoreBlue = 0;
@@ -307,7 +301,7 @@ class Player {
             ctx.font = "bold 11px sans-serif";
             ctx.fillText(`${this.ownerName} [${this.skillLevel.toFixed(1)}v]`, this.x, this.y - this.radius - 8);
 
-            if (isCooling) {
+            if (isCooling && gameState !== "PAUSE") {
                 const remaining = Math.ceil((this.defenseCooldown - timePassed) / 1000);
                 ctx.fillStyle = "#ff4d4d";
                 ctx.font = "9px sans-serif";
@@ -492,6 +486,7 @@ function authReferee() {
         
         document.getElementById("matchType").disabled = false;
         document.getElementById("startBtn").disabled = false;
+        pauseBtn.disabled = false; // 심판 인증 시 일시정지 버튼도 활성화
         document.getElementById("teamNameBlueInput").disabled = false;
         document.getElementById("teamNameRedInput").disabled = false;
         document.getElementById("refereeZone").style.display = "none"; 
@@ -531,7 +526,16 @@ function startGame() {
     }
 }
 
+// 일시정지 토글 함수 신설
+function togglePause() {
+    if (!isReferee) return;
+    if (gameState === "SETUP") return; // 시작도 안 했을 때는 작동 안 함
+    pauseBtn.blur();
+    socket.emit("syncTogglePause");
+}
+
 function shootAction(player) {
+    if (gameState === "PAUSE") return;
     ball.holder = null;
     ball.isFlying = true;
     
@@ -564,6 +568,7 @@ function shootAction(player) {
 }
 
 function passAction(player) {
+    if (gameState === "PAUSE") return;
     ball.holder = null;
     ball.isFlying = true;
     const power = 11;
@@ -612,6 +617,8 @@ window.addEventListener("keydown", e => {
     const key = e.key.toLowerCase();
     keys[key] = true;
     
+    if (gameState === "PAUSE") return; // 일시정지 상태에선 모든 키 입력 가로막기
+
     if (gameState === "MINIGAME" && e.key === " ") {
         miniGameGauge -= 5;
         if (miniGameGauge < 0) miniGameGauge = 0;
@@ -674,6 +681,7 @@ function startDefenseMiniGame(defender, attacker) {
 
     cutIn.classList.add("active");
     setTimeout(() => {
+        if (gameState === "PAUSE") return; // 컷인 도중 정지 시 무시
         cutIn.classList.remove("active");
         miniGameUI.style.display = "block";
     }, 600);
@@ -713,6 +721,9 @@ function endMiniGame(isDefenderWin) {
 }
 
 function update() {
+    // 일시정지 상태일 때는 물리 엔진 및 이동 로직 통째로 패스하기
+    if (gameState === "PAUSE") return;
+
     if (gameState === "PLAYING") {
         activePlayers.forEach(p => {
             if (p.ownerName) {
@@ -759,6 +770,18 @@ function draw() {
 
     activePlayers.forEach(p => p.draw());
     ball.draw();
+
+    // 일시정지 상태일 때 화면 가운데 정지 표시 띄워주기
+    if (gameState === "PAUSE") {
+        ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        ctx.fillStyle = "#fff";
+        ctx.font = "bold 40px sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText("⏸ MATCH PAUSED", canvas.width / 2, canvas.height / 2);
+    }
 }
 
 function gameLoop() {
@@ -796,14 +819,26 @@ socket.on("onInitRoomState", (serverRoom) => {
     document.getElementById("score1").innerText = scoreBlue;
     document.getElementById("score2").innerText = scoreRed;
 
-    if (gameState === "PLAYING" || gameState === "MINIGAME") {
-        statusText.innerText = "[경기 중] 매치 진행 중!";
-        statusText.style.color = "#2ecc71";
+    if (gameState === "PLAYING" || gameState === "MINIGAME" || gameState === "PAUSE") {
+        document.getElementById("startBtn").disabled = !isReferee;
+        pauseBtn.disabled = !isReferee;
+        
+        if (gameState === "PAUSE") {
+            statusText.innerText = "[일시정지] 경기가 멈췄습니다.";
+            statusText.style.color = "#e74c3c";
+            pauseBtn.innerText = "▶ RESUME";
+        } else {
+            statusText.innerText = "[경기 중] 매치 진행 중!";
+            statusText.style.color = "#2ecc71";
+            pauseBtn.innerText = "⏸ PAUSE";
+        }
         document.getElementById("startBtn").innerText = "⏸ RESET MATCH";
     } else {
         statusText.innerText = isReferee ? "[대기 모드] 세팅 후 시작하세요." : "[관전자 모드] 코드를 입력하세요.";
         statusText.style.color = "#f1c40f";
         document.getElementById("startBtn").innerText = "▶ GAME START";
+        pauseBtn.disabled = true;
+        pauseBtn.innerText = "⏸ PAUSE";
     }
 });
 
@@ -875,6 +910,8 @@ socket.on("onStartGame", (data) => {
     statusText.innerText = "[경기 중] 매치 진행 중!";
     statusText.style.color = "#2ecc71";
     document.getElementById("startBtn").innerText = "⏸ RESET MATCH";
+    pauseBtn.disabled = !isReferee;
+    pauseBtn.innerText = "⏸ PAUSE";
 });
 
 socket.on("onResetMatch", () => {
@@ -882,6 +919,8 @@ socket.on("onResetMatch", () => {
     statusText.innerText = "[대기 모드] 세팅 후 시작하세요.";
     statusText.style.color = "#f1c40f";
     document.getElementById("startBtn").innerText = "▶ GAME START";
+    pauseBtn.disabled = true;
+    pauseBtn.innerText = "⏸ PAUSE";
     
     scoreBlue = 0; scoreRed = 0;
     document.getElementById("score1").innerText = 0;
@@ -889,6 +928,20 @@ socket.on("onResetMatch", () => {
     defenseLockUntil = 0;
     initPlayers();
     ball.resetBall();
+});
+
+// 서버의 일시정지 토글 응답 수신
+socket.on("onTogglePause", (data) => {
+    gameState = data.gameState;
+    if (data.isPaused) {
+        statusText.innerText = "[일시정지] 경기가 멈췄습니다.";
+        statusText.style.color = "#e74c3c";
+        pauseBtn.innerText = "▶ RESUME";
+    } else {
+        statusText.innerText = "[경기 중] 매치 진행 중!";
+        statusText.style.color = "#2ecc71";
+        pauseBtn.innerText = "⏸ PAUSE";
+    }
 });
 
 socket.on("onScore", (data) => {

@@ -24,6 +24,9 @@ let roomState = {
     registeredOwners: [] 
 };
 
+// 일시정지 전의 이전 게임 상태를 기억하기 위한 변수
+let prePauseState = "SETUP";
+
 io.on('connection', (socket) => {
     console.log(`클라이언트 소켓 연결 완료: ${socket.id}`);
 
@@ -75,7 +78,20 @@ io.on('connection', (socket) => {
         roomState.scoreBlue = 0;
         roomState.scoreRed = 0;
         roomState.registeredOwners = [];
+        prePauseState = "SETUP";
         io.emit('onResetMatch');
+    });
+
+    // 일시정지 토글 이벤트 처리
+    socket.on('syncTogglePause', () => {
+        if (roomState.gameState === "PAUSE") {
+            roomState.gameState = prePauseState; // 원래 상태로 복구
+            io.emit('onTogglePause', { gameState: roomState.gameState, isPaused: false });
+        } else {
+            prePauseState = roomState.gameState; // 기존 상태 저장 (PLAYING 또는 MINIGAME)
+            roomState.gameState = "PAUSE";
+            io.emit('onTogglePause', { gameState: "PAUSE", isPaused: true });
+        }
     });
 
     socket.on('syncScore', (data) => {

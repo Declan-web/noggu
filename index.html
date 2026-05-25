@@ -509,7 +509,6 @@ function changeMatchType() {
     socket.emit("syncMatchType", currentMaxPairs);
 }
 
-// 실시간 팀명 송신 함수
 function sendLiveTeamName(team) {
     if (!isReferee) return;
     let inputVal = "";
@@ -633,10 +632,25 @@ window.addEventListener("keydown", e => {
     
     if (gameState === "PAUSE") return; 
 
+    // [디펜스 미니게임 유저 경쟁 연타 핵정밀 반영 로직]
     if (gameState === "MINIGAME" && e.key === " ") {
-        miniGameGauge -= 5;
-        if (miniGameGauge < 0) miniGameGauge = 0;
-        socket.emit("syncMiniGameHit", miniGameGauge);
+        // 내 본인 소유의 활성화된 선수가 수비수인가 공격수인가에 따라 게이지를 다르게 조작
+        activePlayers.forEach(p => {
+            if (p.ownerName) {
+                if (activeDefender && p.team === activeDefender.team && p.id === activeDefender.id) {
+                    // 수비수가 누르면 게이지 감소 (0%로 밀어냄)
+                    miniGameGauge -= 4;
+                    if (miniGameGauge < 0) miniGameGauge = 0;
+                    socket.emit("syncMiniGameHit", miniGameGauge);
+                }
+                else if (activeAttacker && p.team === activeAttacker.team && p.id === activeAttacker.id) {
+                    // 공격수가 누르면 게이지 증가 (100%로 밀어냄)
+                    miniGameGauge += 4;
+                    if (miniGameGauge > 100) miniGameGauge = 100;
+                    socket.emit("syncMiniGameHit", miniGameGauge);
+                }
+            }
+        });
         return;
     }
 
@@ -687,7 +701,7 @@ function startDefenseMiniGame(defender, attacker) {
     activeDefender = defender;
     activeAttacker = attacker;
     miniGameGauge = 50; 
-    miniGameTimer = 150; 
+    miniGameTimer = 180; // 경쟁의 깊이를 위해 제한 시간을 살짝 여유있게 확보
 
     const defName = defender.ownerName || `${defender.team === "BLUE" ? teamBlueName : teamRedName} ${defender.id}`;
     const attName = attacker.ownerName || `${attacker.team === "BLUE" ? teamBlueName : teamRedName} ${attacker.id}`;
@@ -706,13 +720,12 @@ function updateMiniGame() {
     
     if (isReferee) {
         miniGameTimer--;
-        miniGameGauge += 0.35; 
-        if (miniGameGauge > 100) miniGameGauge = 100;
         
+        // [자동 증가 로직 삭제 완료] 순수하게 유저들의 실시간 스페이스바 연타 패킷으로만 승부합니다.
         socket.emit("syncMiniGameTick", { gauge: miniGameGauge, timer: miniGameTimer });
 
-        if (miniGameGauge <= 5) socket.emit("syncEndMiniGame", true);
-        else if (miniGameGauge >= 95 || miniGameTimer <= 0) socket.emit("syncEndMiniGame", false);
+        if (miniGameGauge <= 5) socket.emit("syncEndMiniGame", true); // 수비수 승리조건 만족
+        else if (miniGameGauge >= 95 || miniGameTimer <= 0) socket.emit("syncEndMiniGame", false); // 공격수 승리조건 만족
     }
 }
 
@@ -909,7 +922,6 @@ socket.on("onMatchType", (maxPairs) => {
     initPlayers();
 });
 
-// 다른 플레이어가 타이핑한 팀명을 실시간 수신하여 반영
 socket.on("onLiveTeamName", (data) => {
     if (data.team === "BLUE") {
         teamBlueName = data.name;

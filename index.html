@@ -48,6 +48,13 @@
             border: 1px solid #666;
             width: 100px;
         }
+        input[type="number"] {
+            background-color: #444;
+            color: #fff;
+            border: 1px solid #666;
+            width: 50px;
+            text-align: center;
+        }
         select {
             background-color: #444;
             color: #fff;
@@ -137,6 +144,15 @@
             border-radius: 5px;
             border: 1px solid #444;
         }
+        #adminSkillZone {
+            display: none;
+            align-items: center;
+            gap: 5px;
+            background: #444;
+            padding: 3px 8px;
+            border-radius: 4px;
+            border: 1px solid #666;
+        }
     </style>
     <script src="/socket.io/socket.io.js"></script>
 </head>
@@ -149,6 +165,13 @@
             <button onclick="authReferee()" id="authBtn">인증</button>
         </div>
         
+        <div id="adminSkillZone">
+            <label>📊 경기력 관리:</label>
+            <select id="adminTargetPlayer" onchange="loadTargetSkillLevel()"></select>
+            <input type="number" id="adminSkillInput" min="5.0" max="9.9" step="0.1" value="5.0">
+            <button onclick="updatePlayerSkill()">적용</button>
+        </div>
+
         <span style="color:#555;">|</span>
 
         <label>팀명 세팅: </label>
@@ -186,7 +209,7 @@
 
     <div class="controls-info">
         <strong>🎮 온라인 공통 조작 가이드</strong> (모든 유저는 개별 화면에서 동일한 조작계를 사용합니다)<br>
-        <span style="color: #f1c40f;">이동: 방향키 (↑, ↓, ←, →) | 슛: Spacebar | 패스: C | 디펜스: X (쿨타임 7초)</span>
+        <span style="color: #f1c40f;">이동: 방향키 (↑, ↓, ←, →) | 공 줍기: Enter | 슛: Spacebar | 패스: C | 디펜스: X (쿨타임 7초)</span>
     </div>
 
 <script>
@@ -210,8 +233,8 @@ let miniGameTimer = 0;
 let activeDefender = null;
 let activeAttacker = null;
 
-let currentMaxPairs = 5; 
-let isReferee = false; 
+// 디펜스 보호막 활성화 변수 (이 시간 안에는 추가 디펜스 시도 불가)
+let defenseLockUntil = 0;
 
 const registeredNames = new Set();
 
@@ -222,7 +245,7 @@ const court = {
     rightGoal: { x: 950, y: 250, radius: 20 }
 };
 
-const onlineScheme = { up: 'arrowup', down: 'arrowdown', left: 'arrowleft', right: 'arrowright', shoot: ' ', pass: 'c', def: 'x' };
+const onlineScheme = { up: 'arrowup', down: 'arrowdown', left: 'arrowleft', right: 'arrowright', shoot: ' ', pass: 'c', def: 'x', grab: 'enter' };
 
 class Player {
     constructor(x, y, team, id, spawnIndex) {
@@ -240,6 +263,8 @@ class Player {
 
         this.lastDefenseTime = 0; 
         this.defenseCooldown = 7000; 
+        
+        this.skillLevel = 5.0;
     }
 
     draw() {
@@ -277,7 +302,7 @@ class Player {
         if (this.ownerName) {
             ctx.fillStyle = "#fff";
             ctx.font = "bold 11px sans-serif";
-            ctx.fillText(this.ownerName, this.x, this.y - this.radius - 8);
+            ctx.fillText(`${this.ownerName} [${this.skillLevel.toFixed(1)}v]`, this.x, this.y - this.radius - 8);
 
             if (isCooling) {
                 const remaining = Math.ceil((this.defenseCooldown - timePassed) / 1000);
@@ -313,13 +338,20 @@ class Player {
                 shootAction(this);
             }
         } else {
-            dx = ball.x - this.x;
-            dy = ball.y - this.y;
+            if (!ball.holder) {
+                dx = ball.x - this.x;
+                dy = ball.y - this.y;
+            }
         }
 
         if (dx !== 0 || dy !== 0) {
             const length = Math.hypot(dx, dy);
             this.move(dx / length, dy / length);
+            
+            if (!ball.holder && !ball.isFlying && Math.hypot(ball.x - this.x, ball.y - this.y) < this.radius + ball.radius + 2) {
+                ball.holder = this;
+                socket.emit("syncBallAction", { x: ball.x, y: ball.y, vx: 0, vy: 0, holderId: { team: this.team, id: this.id }, isFlying: false });
+            }
         }
     }
 }
@@ -409,6 +441,45 @@ function initPlayers() {
         let rPos = allSpawnPositions.RED[i];
         activePlayers.push(new Player(rPos.x, rPos.y, "RED", i+1, i));
     }
+    updateAdminDropdown();
+}
+
+function updateAdminDropdown() {
+    const select = document.getElementById("adminTargetPlayer");
+    if (!select) return;
+    select.innerHTML = "";
+    activePlayers.forEach(p => {
+        if(p.ownerName) {
+            const opt = document.createElement("option");
+            opt.value = `${p.team}_${p.id}`;
+            opt.innerText = `[${p.team}] ${p.ownerName} (${p.id}번)`;
+            select.appendChild(opt);
+        }
+    });
+    loadTargetSkillLevel();
+}
+
+function loadTargetSkillLevel() {
+    const select = document.getElementById("adminTargetPlayer");
+    if (!select || !select.value) return;
+    const [team, id] = select.value.split("_");
+    const target = activePlayers.find(p => p.team === team && p.id === parseInt(id));
+    if (target) {
+        document.getElementById("adminSkillInput").value = target.skillLevel.toFixed(1);
+    }
+}
+
+function updatePlayerSkill() {
+    if (!isReferee) return;
+    const select = document.getElementById("adminTargetPlayer");
+    if (!select || !select.value) return;
+    const [team, id] = select.value.split("_");
+    let val = parseFloat(document.getElementById("adminSkillInput").value);
+    
+    if (isNaN(val) || val < 5.0) val = 5.0;
+    if (val > 9.9) val = 9.9;
+    
+    socket.emit("syncUpdateSkillLevel", { team, id: parseInt(id), skillLevel: val });
 }
 
 function authReferee() {
@@ -422,6 +493,9 @@ function authReferee() {
         document.getElementById("teamNameBlueInput").disabled = false;
         document.getElementById("teamNameRedInput").disabled = false;
         document.getElementById("refereeZone").style.display = "none"; 
+        document.getElementById("adminSkillZone").style.display = "flex"; 
+        
+        updateAdminDropdown();
         
         if(gameState === "SETUP") {
             statusText.innerText = "[대기 모드] 세팅 후 시작하세요.";
@@ -458,9 +532,32 @@ function startGame() {
 function shootAction(player) {
     ball.holder = null;
     ball.isFlying = true;
-    const power = 14;
-    ball.vx = Math.cos(player.angle) * power;
-    ball.vy = Math.sin(player.angle) * power;
+    
+    const lv = player.skillLevel;
+    let successChance = 0.50; 
+    
+    if (lv >= 6.0 && lv < 7.0) successChance = 0.60;
+    else if (lv >= 7.0 && lv < 8.0) successChance = 0.70;
+    else if (lv >= 8.0 && lv < 9.0) successChance = 0.80;
+    else if (lv >= 9.0) successChance = 0.90;
+
+    const isSuccess = Math.random() < successChance;
+    
+    if (isSuccess) {
+        const targetGoal = player.team === "BLUE" ? court.rightGoal : court.leftGoal;
+        const angle = Math.atan2(targetGoal.y - player.y, targetGoal.x - player.x);
+        const power = 14;
+        ball.vx = Math.cos(angle) * power;
+        ball.vy = Math.sin(angle) * power;
+    } else {
+        const targetGoal = player.team === "BLUE" ? court.rightGoal : court.leftGoal;
+        const dev = (Math.random() - 0.5) * 0.6; 
+        const angle = Math.atan2(targetGoal.y - player.y, targetGoal.x - player.x) + dev;
+        const power = 13;
+        ball.vx = Math.cos(angle) * power;
+        ball.vy = Math.sin(angle) * power;
+    }
+
     socket.emit("syncBallAction", { x: ball.x, y: ball.y, vx: ball.vx, vy: ball.vy, holderId: null, isFlying: true });
 }
 
@@ -500,6 +597,7 @@ canvas.addEventListener("click", e => {
                     registeredNames.add(trimmedName);
                     
                     socket.emit("syncRegisterOwner", { team: p.team, id: p.id, ownerName: trimmedName });
+                    updateAdminDropdown();
                 }
             } else {
                 alert(`이미 선점된 캐릭터입니다.`);
@@ -510,7 +608,7 @@ canvas.addEventListener("click", e => {
 
 const keys = {};
 window.addEventListener("keydown", e => {
-    if (e.key === " ") e.preventDefault(); 
+    if (e.key === " " || e.key === "Enter") e.preventDefault(); 
 
     const key = e.key.toLowerCase();
     keys[key] = true;
@@ -525,6 +623,10 @@ window.addEventListener("keydown", e => {
     if (gameState === "PLAYING") {
         activePlayers.forEach(p => {
             if (p.ownerName) {
+                if (key === onlineScheme.grab) {
+                    checkManualBallGrab(p);
+                }
+                
                 if (ball.holder === p) {
                     if (key === onlineScheme.shoot) shootAction(p);
                     if (key === onlineScheme.pass) passAction(p);
@@ -536,11 +638,23 @@ window.addEventListener("keydown", e => {
 });
 window.addEventListener("keyup", e => { keys[e.key.toLowerCase()] = false; });
 
+function checkManualBallGrab(player) {
+    if (ball.holder || ball.isFlying) return;
+    
+    // 디펜스 보호막 활성화 중이어도 수동으로 루즈볼을 줍는 것은 가능
+    const dist = Math.hypot(ball.x - player.x, ball.y - player.y);
+    if (dist < player.radius + ball.radius + 15) { 
+        ball.holder = player;
+        socket.emit("syncBallAction", { x: ball.x, y: ball.y, vx: 0, vy: 0, holderId: { team: player.team, id: player.id }, isFlying: false });
+    }
+}
+
 function checkDefenseTrigger(defender) {
     const now = Date.now();
-    if (now - defender.lastDefenseTime < defender.defenseCooldown) {
-        return; 
-    }
+    
+    // [핵심 수정] 미니게임 종료 후 3초 동안은 전장 전체에 새로운 디펜스 발동만 원천 차단합니다.
+    if (now < defenseLockUntil) return;
+    if (now - defender.lastDefenseTime < defender.defenseCooldown) return; 
 
     if (ball.holder && ball.holder.team !== defender.team) {
         const dist = Math.hypot(defender.x - ball.holder.x, defender.y - ball.holder.y);
@@ -595,20 +709,13 @@ function endMiniGame(isDefenderWin) {
         activeDefender.x += Math.cos(angle) * 50;
         activeDefender.y += Math.sin(angle) * 50;
     }
+    
+    // [핵심 수정] 미니게임이 종료되면 3초(3000ms) 동안 디펜스 재시도만 제한(Lock)합니다.
+    // 이 상태에서 공격수의 슛과 패스는 정상 작동합니다.
+    defenseLockUntil = Date.now() + 3000;
+
     activeDefender = null;
     activeAttacker = null;
-}
-
-function checkBallAcquisition() {
-    if (gameState !== "PLAYING" || ball.holder || ball.isFlying) return;
-
-    activePlayers.forEach(p => {
-        const dist = Math.hypot(ball.x - p.x, ball.y - p.y);
-        if (dist < p.radius + ball.radius) {
-            ball.holder = p;
-            socket.emit("syncBallAction", { x: ball.x, y: ball.y, vx: 0, vy: 0, holderId: { team: p.team, id: p.id }, isFlying: false });
-        }
-    });
 }
 
 function update() {
@@ -635,7 +742,6 @@ function update() {
 
         ball.update();
         if (isReferee) {
-            checkBallAcquisition();
             socket.emit("syncBallLocation", { x: ball.x, y: ball.y, vx: ball.vx, vy: ball.vy, isFlying: ball.isFlying });
         }
     } else if (gameState === "MINIGAME") {
@@ -667,27 +773,25 @@ function gameLoop() {
     requestAnimationFrame(gameLoop);
 }
 
-// Socket 리스너 통합 연동 브릿지
+// Socket 리스너 연동 브릿지
 
-// [핵심] 새로고침 및 중간 입장 시 서버 마스터 데이터를 받아와 동기화
 socket.on("onInitRoomState", (serverRoom) => {
     gameState = serverRoom.gameState;
     currentMaxPairs = serverRoom.currentMaxPairs;
     document.getElementById("matchType").value = currentMaxPairs;
     
-    // 플레이어 배열 다시 구성
     initPlayers();
 
-    // 저장되어 있던 캐릭터 선점 이름 복구
     serverRoom.registeredOwners.forEach(data => {
         const target = activePlayers.find(p => p.team === data.team && p.id === data.id);
         if (target) {
             target.ownerName = data.ownerName;
+            target.skillLevel = data.skillLevel || 5.0;
             registeredNames.add(data.ownerName);
         }
     });
+    updateAdminDropdown();
 
-    // 팀 네임 및 점수 복구
     teamBlueName = serverRoom.teamBlueName;
     teamRedName = serverRoom.teamRedName;
     document.getElementById("teamLabel1").innerText = teamBlueName;
@@ -700,7 +804,6 @@ socket.on("onInitRoomState", (serverRoom) => {
     document.getElementById("score1").innerText = scoreBlue;
     document.getElementById("score2").innerText = scoreRed;
 
-    // 현재 게임 진행 상황 UI 업데이트
     if (gameState === "PLAYING" || gameState === "MINIGAME") {
         statusText.innerText = "[경기 중] 매치 진행 중!";
         statusText.style.color = "#2ecc71";
@@ -752,7 +855,16 @@ socket.on("onRegisterOwner", (data) => {
     const target = activePlayers.find(p => p.team === data.team && p.id === data.id);
     if (target) {
         target.ownerName = data.ownerName;
+        target.skillLevel = data.skillLevel || 5.0;
         registeredNames.add(data.ownerName);
+        updateAdminDropdown();
+    }
+});
+
+socket.on("onUpdateSkillLevel", (data) => {
+    const target = activePlayers.find(p => p.team === data.team && p.id === data.id);
+    if (target) {
+        target.skillLevel = parseFloat(data.skillLevel);
     }
 });
 
@@ -791,6 +903,7 @@ socket.on("onResetMatch", () => {
     scoreBlue = 0; scoreRed = 0;
     document.getElementById("score1").innerText = 0;
     document.getElementById("score2").innerText = 0;
+    defenseLockUntil = 0;
     initPlayers();
 });
 

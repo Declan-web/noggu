@@ -222,12 +222,16 @@ const miniGameUI = document.getElementById("miniGameUI");
 const progressBar = document.getElementById("progress");
 const statusText = document.getElementById("statusText");
 
+// 심판 권한 판별 변수 선언 누락 버그 해결
+let isReferee = false; 
+
 let scoreBlue = 0;
 let scoreRed = 0;
 let teamBlueName = "TEAM BLUE";
 let teamRedName = "TEAM RED";
 
 let gameState = "SETUP"; 
+let currentMaxPairs = 5;
 let miniGameGauge = 50;    
 let miniGameTimer = 0;
 let activeDefender = null;

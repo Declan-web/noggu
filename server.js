@@ -24,7 +24,6 @@ let roomState = {
     registeredOwners: [] 
 };
 
-// 일시정지 전의 이전 게임 상태를 기억하기 위한 변수
 let prePauseState = "SETUP";
 
 io.on('connection', (socket) => {
@@ -66,6 +65,16 @@ io.on('connection', (socket) => {
         socket.broadcast.emit('onMatchType', maxPairs);
     });
 
+    // 실시간 팀명 변경 타이핑 동기화 이벤트 신설
+    socket.on('syncLiveTeamName', (data) => {
+        if (data.team === "BLUE") {
+            roomState.teamBlueName = data.name;
+        } else if (data.team === "RED") {
+            roomState.teamRedName = data.name;
+        }
+        socket.broadcast.emit('onLiveTeamName', data);
+    });
+
     socket.on('syncStartGame', (data) => {
         roomState.gameState = "PLAYING";
         roomState.teamBlueName = data.teamBlueName;
@@ -82,13 +91,12 @@ io.on('connection', (socket) => {
         io.emit('onResetMatch');
     });
 
-    // 일시정지 토글 이벤트 처리
     socket.on('syncTogglePause', () => {
         if (roomState.gameState === "PAUSE") {
-            roomState.gameState = prePauseState; // 원래 상태로 복구
+            roomState.gameState = prePauseState;
             io.emit('onTogglePause', { gameState: roomState.gameState, isPaused: false });
         } else {
-            prePauseState = roomState.gameState; // 기존 상태 저장 (PLAYING 또는 MINIGAME)
+            prePauseState = roomState.gameState;
             roomState.gameState = "PAUSE";
             io.emit('onTogglePause', { gameState: "PAUSE", isPaused: true });
         }

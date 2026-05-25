@@ -65,7 +65,7 @@ io.on('connection', (socket) => {
         socket.broadcast.emit('onMatchType', maxPairs);
     });
 
-    // 실시간 팀명 변경 타이핑 동기화 이벤트 신설
+    // 실시간 팀명 변경 타이핑 동기화 이벤트
     socket.on('syncLiveTeamName', (data) => {
         if (data.team === "BLUE") {
             roomState.teamBlueName = data.name;

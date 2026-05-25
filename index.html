@@ -233,7 +233,6 @@ let miniGameTimer = 0;
 let activeDefender = null;
 let activeAttacker = null;
 
-// 디펜스 보호막 활성화 변수 (이 시간 안에는 추가 디펜스 시도 불가)
 let defenseLockUntil = 0;
 
 const registeredNames = new Set();
@@ -432,7 +431,6 @@ let activePlayers = [];
 function initPlayers() {
     activePlayers = [];
     registeredNames.clear();
-    ball.resetBall();
 
     for(let i = 0; i < currentMaxPairs; i++) {
         let bPos = allSpawnPositions.BLUE[i];
@@ -571,10 +569,7 @@ function passAction(player) {
 }
 
 canvas.addEventListener("click", e => {
-    if (gameState !== "SETUP") {
-        alert("대기 모드에서만 팀원을 할당합니다.");
-        return;
-    }
+    if (gameState !== "SETUP") return;
 
     const rect = canvas.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
@@ -589,7 +584,7 @@ canvas.addEventListener("click", e => {
                     const trimmedName = name.trim();
                     
                     if (registeredNames.has(trimmedName)) {
-                        alert(`'${trimmedName}' 유저는 이미 한 명의 캐릭터를 선점했습니다. 인당 한 개씩만 가능합니다.`);
+                        alert(`'${trimmedName}' 유저는 이미 캐릭터를 선택했습니다.`);
                         return;
                     }
 
@@ -641,7 +636,6 @@ window.addEventListener("keyup", e => { keys[e.key.toLowerCase()] = false; });
 function checkManualBallGrab(player) {
     if (ball.holder || ball.isFlying) return;
     
-    // 디펜스 보호막 활성화 중이어도 수동으로 루즈볼을 줍는 것은 가능
     const dist = Math.hypot(ball.x - player.x, ball.y - player.y);
     if (dist < player.radius + ball.radius + 15) { 
         ball.holder = player;
@@ -651,8 +645,6 @@ function checkManualBallGrab(player) {
 
 function checkDefenseTrigger(defender) {
     const now = Date.now();
-    
-    // [핵심 수정] 미니게임 종료 후 3초 동안은 전장 전체에 새로운 디펜스 발동만 원천 차단합니다.
     if (now < defenseLockUntil) return;
     if (now - defender.lastDefenseTime < defender.defenseCooldown) return; 
 
@@ -710,8 +702,6 @@ function endMiniGame(isDefenderWin) {
         activeDefender.y += Math.sin(angle) * 50;
     }
     
-    // [핵심 수정] 미니게임이 종료되면 3초(3000ms) 동안 디펜스 재시도만 제한(Lock)합니다.
-    // 이 상태에서 공격수의 슛과 패스는 정상 작동합니다.
     defenseLockUntil = Date.now() + 3000;
 
     activeDefender = null;
@@ -773,8 +763,6 @@ function gameLoop() {
     requestAnimationFrame(gameLoop);
 }
 
-// Socket 리스너 연동 브릿지
-
 socket.on("onInitRoomState", (serverRoom) => {
     gameState = serverRoom.gameState;
     currentMaxPairs = serverRoom.currentMaxPairs;
@@ -808,14 +796,10 @@ socket.on("onInitRoomState", (serverRoom) => {
         statusText.innerText = "[경기 중] 매치 진행 중!";
         statusText.style.color = "#2ecc71";
         document.getElementById("startBtn").innerText = "⏸ RESET MATCH";
-        document.getElementById("teamNameBlueInput").disabled = true;
-        document.getElementById("teamNameRedInput").disabled = true;
     } else {
         statusText.innerText = isReferee ? "[대기 모드] 세팅 후 시작하세요." : "[관전자 모드] 코드를 입력하세요.";
         statusText.style.color = "#f1c40f";
         document.getElementById("startBtn").innerText = "▶ GAME START";
-        document.getElementById("teamNameBlueInput").disabled = !isReferee;
-        document.getElementById("teamNameRedInput").disabled = !isReferee;
     }
 });
 
@@ -876,14 +860,12 @@ socket.on("onMatchType", (maxPairs) => {
 
 socket.on("onStartGame", (data) => {
     teamBlueName = data.teamBlueName;
-    teamRedName = data.redName || data.teamRedName;
+    teamRedName = data.teamRedName;
     document.getElementById("teamLabel1").innerText = teamBlueName;
     document.getElementById("teamLabel2").innerText = teamRedName;
     
     document.getElementById("teamNameBlueInput").value = teamBlueName;
     document.getElementById("teamNameRedInput").value = teamRedName;
-    document.getElementById("teamNameBlueInput").disabled = true;
-    document.getElementById("teamNameRedInput").disabled = true;
 
     gameState = "PLAYING";
     statusText.innerText = "[경기 중] 매치 진행 중!";
@@ -897,14 +879,12 @@ socket.on("onResetMatch", () => {
     statusText.style.color = "#f1c40f";
     document.getElementById("startBtn").innerText = "▶ GAME START";
     
-    document.getElementById("teamNameBlueInput").disabled = !isReferee;
-    document.getElementById("teamNameRedInput").disabled = !isReferee;
-
     scoreBlue = 0; scoreRed = 0;
     document.getElementById("score1").innerText = 0;
     document.getElementById("score2").innerText = 0;
     defenseLockUntil = 0;
     initPlayers();
+    ball.resetBall();
 });
 
 socket.on("onScore", (data) => {
@@ -941,6 +921,7 @@ socket.on("onEndMiniGame", (isDefWin) => {
 });
 
 initPlayers();
+ball.resetBall();
 gameLoop();
 </script>
 </body>

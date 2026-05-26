@@ -192,7 +192,7 @@
         </select>
         <button id="startBtn" onclick="startGame()" disabled>▶ GAME START</button>
         <button id="pauseBtn" onclick="togglePause()" disabled>⏸ PAUSE</button>
-        <button id="resetBtn" onclick="triggerManualReset()" disabled>🔄 RESET MATCH</button>
+        <button id="resetBtn" onclick="triggerManualReset()" disabled>RESET MATCH</button>
         <span id="statusText" style="color: #f1c40f; margin-left: 5px;">[관전자 모드] 코드를 입력하세요.</span>
     </div>
     
@@ -203,7 +203,7 @@
             <div class="progress-bar">
                 <div id="progress"></div>
             </div>
-            <div id="miniGameVS" style="font-size:12px; margin-top:5px; color:#ccc;">수비수 VS 공격수</div>
+            <div id="miniGameVS" style="font-size:12px; margin-top:5px; color:#ccc;">수비 VS 공격</div>
         </div>
         <canvas id="gameCanvas" width="1000" height="500"></canvas>
     </div>
@@ -241,7 +241,6 @@ let activeAttacker = null;
 
 let defenseLockUntil = 0;
 
-// 내 브라우저가 소유하고 제어권을 쥔 전용 Player 객체 참조 저장소
 let myControllingPlayer = null; 
 const registeredNames = new Set();
 
@@ -266,7 +265,7 @@ class Player {
         this.color = team === "BLUE" ? "#3498db" : "#e74c3c";
         
         this.ownerName = null;     
-        this.socketId = null; // 어떤 소켓의 소유물인지 식별
+        this.socketId = null; 
         this.angle = team === "BLUE" ? 0 : Math.PI; 
 
         this.lastDefenseTime = 0; 
@@ -337,7 +336,6 @@ class Player {
 
         let dx = 0, dy = 0;
         if (ball.holder === this) {
-            // AI는 기본적으로 전방을 보며 수동 슛 기회를 엿봄
             this.angle = this.team === "BLUE" ? 0 : Math.PI;
             const targetGoal = this.team === "BLUE" ? court.rightGoal : court.leftGoal;
             const distToGoal = Math.hypot(targetGoal.x - this.x, targetGoal.y - this.y);
@@ -402,9 +400,11 @@ const ball = {
             const distToRight = Math.hypot(this.x - court.rightGoal.x, this.y - court.rightGoal.y);
             const distToLeft = Math.hypot(this.x - court.leftGoal.x, this.y - court.leftGoal.y);
 
-            // [바라보는 방향으로 슛 발사 및 원 내부 도달 시 경기력 확률 기반 골/튕겨내기 판정]
-            if (distToRight < court.rightGoal.radius) this.checkGoalProbability("BLUE");
-            if (distToLeft < court.leftGoal.radius) this.checkGoalProbability("RED");
+            // [심판 권한 브라우저에서만 확정적 연산 처리하여 전역 동기화 꼬임 버그 수정]
+            if (isReferee) {
+                if (distToRight < court.rightGoal.radius) this.checkGoalProbability("BLUE");
+                if (distToLeft < court.leftGoal.radius) this.checkGoalProbability("RED");
+            }
 
             if (Math.abs(this.vx) < 0.3 && Math.abs(this.vy) < 0.3) this.isFlying = false;
         }
@@ -415,18 +415,13 @@ const ball = {
         this.y = Math.max(this.radius, Math.min(court.height - this.radius, this.y));
     },
 
-    // 골인 판정 전 확률 체크 (경기력 연동 및 골대 튕겨내기 구현)
     checkGoalProbability(goalTeam) {
-        if (!isReferee) return; // 판정 연산 꼬임 방지를 위해 심판 브라우저에서 1등 연산 처리
-        
-        // 슛을 날렸던 슈터의 경기력(skillLevel) 조회, 없으면 기본값 5.0
         const shooterLv = ball.lastShooterSkill || 5.0;
         
-        // 경기력 5.0v = 45% 성공률, 9.9v = 94% 성공률 매핑 논리
-        let scoreSuccessChance = 0.45 + ((shooterLv - 5.0) / 4.9) * 0.49;
+        // 보정된 골 성공 확률 연산식 (5.0v = 50%, 9.9v = 95%)
+        let scoreSuccessChance = 0.50 + ((shooterLv - 5.0) / 4.9) * 0.45;
         
         if (Math.random() < scoreSuccessChance) {
-            // 골인 성공!
             this.isFlying = false;
             if (goalTeam === "BLUE") { scoreBlue += 2; }
             else { scoreRed += 2; }
@@ -436,11 +431,11 @@ const ball = {
             socket.emit("syncScore", { blue: scoreBlue, red: scoreRed });
             this.resetBall();
         } else {
-            // 경기력 판정에 의한 강제 튕겨내기 발동 (역방향 바운스 연산)
-            this.vx = -this.vx * 1.1; 
-            this.vy = (Math.random() - 0.5) * 12; // 사방으로 난반사 처리
-            this.x += this.vx * 2; // 무한 판정 방지 탈출 탈착
-            socket.emit("syncBallAction", { x: this.x, y: this.y, vx: this.vx, vy: this.vy, holderId: null, isFlying: true });
+            // 확률 패배 시 리얼하게 역방향 난반사 튕겨내기 구현
+            this.vx = -this.vx * 1.05; 
+            this.vy = (Math.random() - 0.5) * 11; 
+            this.x += this.vx * 2; 
+            socket.emit("syncBallAction", { x: this.x, y: this.y, vx: this.vx, vy: this.vy, holderId: null, isFlying: true, lastShooterSkill: shooterLv });
         }
     },
 
@@ -451,6 +446,9 @@ const ball = {
         this.vy = 0;
         this.holder = null;
         this.lastShooterSkill = 5.0;
+        if (isReferee) {
+            socket.emit("syncBallAction", { x: 500, y: 250, vx: 0, vy: 0, holderId: null, isFlying: false });
+        }
     }
 };
 
@@ -573,7 +571,6 @@ function startGame() {
     }
 }
 
-// 중지 옆 새로 만든 중단 및 완전 대기실 리셋 유발 함수
 function triggerManualReset() {
     if (!isReferee) return;
     resetBtn.blur();
@@ -589,18 +586,14 @@ function togglePause() {
     socket.emit("syncTogglePause");
 }
 
-// 슛 액션 개편: 바라보는 각도로 일직선 강슛 발사!
 function shootAction(player) {
     if (gameState === "PAUSE") return;
     ball.holder = null;
     ball.isFlying = true;
     
-    // 플레이어가 조준하고 있는 각도 그대로 물리 벡터 투사
     const power = 14;
     ball.vx = Math.cos(player.angle) * power;
     ball.vy = Math.sin(player.angle) * power;
-
-    // 볼 내부 변수에 쏜 사람의 스킬레벨을 기록하여 골대 도달 시 판정에 연동
     ball.lastShooterSkill = player.skillLevel;
 
     socket.emit("syncBallAction", { 
@@ -649,8 +642,8 @@ canvas.addEventListener("click", e => {
                     }
 
                     p.ownerName = trimmedName;
-                    p.socketId = socket.id; // 클라이언트 자신의 고유 소켓 연동
-                    myControllingPlayer = p; // 로컬 바인딩 완료
+                    p.socketId = socket.id; 
+                    myControllingPlayer = p; 
                     registeredNames.add(trimmedName);
                     
                     socket.emit("syncRegisterOwner", { team: p.team, id: p.id, ownerName: trimmedName });
@@ -672,7 +665,6 @@ window.addEventListener("keydown", e => {
     
     if (gameState === "PAUSE") return; 
 
-    // 디펜스 연타 판정 로직 격리
     if (gameState === "MINIGAME" && e.key === " ") {
         if (myControllingPlayer) {
             const p = myControllingPlayer;
@@ -690,7 +682,6 @@ window.addEventListener("keydown", e => {
         return;
     }
 
-    // 인게임 플레이 키 조작 처리도 내가 조유한 단 하나의 캐릭터(myControllingPlayer)만 독점 실행!
     if (gameState === "PLAYING" && myControllingPlayer) {
         const p = myControllingPlayer;
         if (key === onlineScheme.grab) {
@@ -760,16 +751,32 @@ function updateMiniGame() {
     }
 }
 
+// [디펜스 승리 시 실시간 소유권 이전 동기화 누락 버그 해결 완료]
 function endMiniGame(isDefenderWin) {
     gameState = "PLAYING";
     miniGameUI.style.display = "none";
 
     if (isDefenderWin) {
         ball.holder = activeDefender;
+        // 심판 브라우저가 승리 판정을 취합하여 소유권 이전을 즉시 소켓 패킷으로 강제 방송합니다.
+        if (isReferee) {
+            socket.emit("syncBallAction", { 
+                x: ball.x, 
+                y: ball.y, 
+                vx: 0, 
+                vy: 0, 
+                holderId: { team: activeDefender.team, id: activeDefender.id }, 
+                isFlying: false 
+            });
+        }
     } else {
         const angle = Math.atan2(activeDefender.y - activeAttacker.y, activeDefender.x - activeAttacker.x);
         activeDefender.x += Math.cos(angle) * 50;
         activeDefender.y += Math.sin(angle) * 50;
+        // 공격수 승리 시 밀려난 수비수의 실시간 위치 패킷 동기화 전송
+        if (isReferee) {
+            socket.emit("syncPlayerMove", { team: activeDefender.team, id: activeDefender.id, x: activeDefender.x, y: activeDefender.y, angle: activeDefender.angle });
+        }
     }
     
     defenseLockUntil = Date.now() + 3000;
@@ -781,7 +788,6 @@ function update() {
     if (gameState === "PAUSE") return;
 
     if (gameState === "PLAYING") {
-        // [내 로컬 전용 단독 플레이어만 직접 이동 처리 연산 수행]
         if (myControllingPlayer) {
             const p = myControllingPlayer;
             let dx = 0, dy = 0;
@@ -796,7 +802,6 @@ function update() {
             }
         }
 
-        // AI 선수들은 심판 전용 브라우저에서 총괄 연산 후 전송
         activePlayers.forEach(p => {
             if (!p.ownerName && isReferee) {
                 p.updateAI();
@@ -862,7 +867,6 @@ socket.on("onInitRoomState", (serverRoom) => {
             target.socketId = data.socketId;
             target.skillLevel = data.skillLevel || 5.0;
             registeredNames.add(data.ownerName);
-            // 만약 나갔다 들어왔거나 이미 등록된 내 소켓ID라면 로컬 제어권 다시 연결
             if(data.socketId === socket.id) {
                 myControllingPlayer = target;
             }
@@ -885,7 +889,6 @@ socket.on("onInitRoomState", (serverRoom) => {
     toggleUIVisibility();
 });
 
-// 실시간 서버 이탈 및 방 업데이트 이벤트 핸들러 추가
 socket.on("onRoomOwnersUpdate", (ownersList) => {
     registeredNames.clear();
     activePlayers.forEach(p => {
@@ -912,7 +915,6 @@ socket.on("onRoomOwnersUpdate", (ownersList) => {
 });
 
 socket.on("onPlayerMove", (data) => {
-    // 내가 조종하는 선수가 아닌 다른 플레이어의 좌표 정보만 화면 동기화 반영
     const target = activePlayers.find(p => p.team === data.team && p.id === data.id);
     if (target && target.socketId !== socket.id) {
         target.x = data.x;

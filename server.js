@@ -29,7 +29,6 @@ let prePauseState = "SETUP";
 io.on('connection', (socket) => {
     console.log(`클라이언트 소켓 연결 완료: ${socket.id}`);
 
-    // 접속한 유저에게 현재 방 상태 전송
     socket.emit('onInitRoomState', roomState);
 
     socket.on('syncPlayerMove', (data) => {
@@ -44,15 +43,14 @@ io.on('connection', (socket) => {
         io.emit('onBallAction', data);
     });
 
-    // 캐릭터 등록 시, 신청한 소켓의 ID(socket.id)를 함께 저장하여 소유권 격리
     socket.on('syncRegisterOwner', (data) => {
         const exists = roomState.registeredOwners.find(p => p.team === data.team && p.id === data.id);
         if (!exists) {
             data.skillLevel = 5.0;
-            data.socketId = socket.id; // 소켓 식별자 주입
+            data.socketId = socket.id; 
             roomState.registeredOwners.push(data);
         }
-        io.emit('onRegisterOwner', data); // 전원에게 전송해서 내 캐릭터 브라우저에 매핑되도록 함
+        io.emit('onRegisterOwner', data); 
     });
 
     socket.on('syncUpdateSkillLevel', (data) => {
@@ -84,7 +82,6 @@ io.on('connection', (socket) => {
         io.emit('onStartGame', data);
     });
 
-    // 관리자 전용 전체 매치 완전 초기화
     socket.on('syncResetMatch', () => {
         roomState.gameState = "SETUP";
         roomState.scoreBlue = 0;
@@ -129,7 +126,6 @@ io.on('connection', (socket) => {
         io.emit('onEndMiniGame', isDefWin);
     });
 
-    // 접속 해제 시 해당 유저가 잡고 있던 캐릭터 반환 조치
     socket.on('disconnect', () => {
         console.log(`유저 연결 해제: ${socket.id}`);
         roomState.registeredOwners = roomState.registeredOwners.filter(p => p.socketId !== socket.id);

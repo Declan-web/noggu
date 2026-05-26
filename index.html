@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>다들 모여!</title>
+    <title>다들 뛰어!</title>
     <style>
         body {
             margin: 0;
@@ -192,14 +192,14 @@
         </select>
         <button id="startBtn" onclick="startGame()" disabled>▶ GAME START</button>
         <button id="pauseBtn" onclick="togglePause()" disabled>⏸ PAUSE</button>
-        <button id="resetBtn" onclick="triggerManualReset()" disabled>RESET MATCH</button>
+        <button id="resetBtn" onclick="triggerManualReset()" disabled>🔄 RESET MATCH</button>
         <span id="statusText" style="color: #f1c40f; margin-left: 5px;">[관전자 모드] 코드를 입력하세요.</span>
     </div>
     
     <div id="gameContainer">
         <div id="cutIn">디펜스!!</div>
         <div id="miniGameUI">
-            <div id="miniGameTitle" style="font-weight:bold; font-size:16px;">🔥 space 바를 연타하세요! 🔥</div>
+            <div id="miniGameTitle" style="font-weight:bold; font-size:16px;">🔥 마우스 우클릭을 연타하세요! 🔥</div>
             <div class="progress-bar">
                 <div id="progress"></div>
             </div>
@@ -242,6 +242,7 @@ let activeAttacker = null;
 let defenseLockUntil = 0;
 
 let myControllingPlayer = null; 
+let keys = {}; // const에서 let으로 변경 (초기화 편의성)
 const registeredNames = new Set();
 
 const court = {
@@ -269,7 +270,7 @@ class Player {
         this.angle = team === "BLUE" ? 0 : Math.PI; 
 
         this.lastDefenseTime = 0; 
-        this.defenseCooldown = 7000; 
+        this.defenseCooldown = 3000; // [변경] 디펜스 쿨타임 7초에서 3초로 축소
         
         this.skillLevel = 5.0;
     }
@@ -405,7 +406,6 @@ const ball = {
             const distToRight = Math.hypot(this.x - court.rightGoal.x, this.y - court.rightGoal.y);
             const distToLeft = Math.hypot(this.x - court.leftGoal.x, this.y - court.leftGoal.y);
 
-            // [보정] 고속 슛 패스 시 감지 누락이 절대 생기지 않도록 마진 영역을 25로 크게 확장
             if (distToRight < court.rightGoal.radius + 25 || distToLeft < court.leftGoal.radius + 25) {
                 this.ignoreWalls = true; 
             } else {
@@ -413,8 +413,6 @@ const ball = {
                 this.isChecking = false; 
             }
 
-            // [해결] 이 인지 판정문에서 심판 조건(isReferee)을 완전히 제외시켰습니다!
-            // 이제 심판 인증을 안 한 일반 테스트 브라우저 환경에서도 골대 인식이 무조건 켜집니다.
             if (!this.isChecking) {
                 if (distToRight < court.rightGoal.radius + 25) {
                     this.isChecking = true;
@@ -455,7 +453,6 @@ const ball = {
             this.ignoreWalls = false;
             this.isChecking = false;
 
-            // 오직 실제 심판 역할을 위임받은 클라이언트나 첫 생성 브라우저가 점수 변동을 서버에 동기화 요청함
             if (scoringTeam === "BLUE") { scoreBlue += 2; }
             else { scoreRed += 2; }
             
@@ -467,7 +464,6 @@ const ball = {
             }
             this.resetBall();
         } else {
-            // 확률 골인 실패 시 현실적인 림 튕김 이펙트 구현
             const randomAngle = Math.random() * Math.PI * 2; 
             const bouncePower = 11 + Math.random() * 4; 
             
@@ -676,8 +672,34 @@ function passAction(player) {
     socket.emit("syncBallAction", { x: ball.x, y: ball.y, vx: ball.vx, vy: ball.vy, holderId: null, isFlying: true });
 }
 
-canvas.addEventListener("click", e => {
+// [변경] 브라우저 기본 우클릭 메뉴가 실시간 미니게임 조작을 방해하지 않도록 원천 차단
+document.getElementById("gameContainer").addEventListener("contextmenu", e => {
+    e.preventDefault();
+});
+
+// [변경] 마우스 왼쪽 클릭(캐릭터 지정)과 오른쪽 클릭(미니게임 연타)을 마우스 이벤트 하나로 병합 및 재설계
+canvas.addEventListener("mousedown", e => {
+    // 1. 디펜스 미니게임 진행 중 마우스 우클릭(button === 2) 연타 인식 로직
+    if (gameState === "MINIGAME" && e.button === 2) {
+        if (myControllingPlayer) {
+            const p = myControllingPlayer;
+            if (activeDefender && p.team === activeDefender.team && p.id === activeDefender.id) {
+                miniGameGauge -= 4;
+                if (miniGameGauge < 0) miniGameGauge = 0;
+                socket.emit("syncMiniGameHit", miniGameGauge);
+            }
+            else if (activeAttacker && p.team === activeAttacker.team && p.id === activeAttacker.id) {
+                miniGameGauge += 4;
+                if (miniGameGauge > 100) miniGameGauge = 100;
+                socket.emit("syncMiniGameHit", miniGameGauge);
+            }
+        }
+        return;
+    }
+
+    // 2. 셋업 단계 캐릭터 지정 로직 (기존 좌클릭 분기)
     if (gameState !== "SETUP") return;
+    if (e.button !== 0) return; // 좌클릭만 허용
     if (myControllingPlayer) {
         alert("이미 선택한 캐릭터가 존재합니다. 1인 1캐릭터만 제어 가능합니다.");
         return;
@@ -715,7 +737,6 @@ canvas.addEventListener("click", e => {
     });
 });
 
-const keys = {};
 window.addEventListener("keydown", e => {
     if (e.key === " " || e.key === "Enter") e.preventDefault(); 
 
@@ -724,22 +745,7 @@ window.addEventListener("keydown", e => {
     
     if (gameState === "PAUSE") return; 
 
-    if (gameState === "MINIGAME" && e.key === " ") {
-        if (myControllingPlayer) {
-            const p = myControllingPlayer;
-            if (activeDefender && p.team === activeDefender.team && p.id === activeDefender.id) {
-                miniGameGauge -= 4;
-                if (miniGameGauge < 0) miniGameGauge = 0;
-                socket.emit("syncMiniGameHit", miniGameGauge);
-            }
-            else if (activeAttacker && p.team === activeAttacker.team && p.id === activeAttacker.id) {
-                miniGameGauge += 4;
-                if (miniGameGauge > 100) miniGameGauge = 100;
-                socket.emit("syncMiniGameHit", miniGameGauge);
-            }
-        }
-        return;
-    }
+    // [제거] 기존 스페이스바 미니게임 조건문은 마우스 우클릭으로 변경되어 필요가 없으므로 삭제했습니다.
 
     if (gameState === "PLAYING" && myControllingPlayer) {
         const p = myControllingPlayer;
@@ -803,13 +809,20 @@ function startDefenseMiniGame(defender, attacker) {
 function updateMiniGame() {
     if (gameState !== "MINIGAME") return;
     
+    // [해결] 이 전역 조건 루프에서 isReferee 조건을 삭제했습니다.
+    // 이제 방장이 심판 인증을 안 받았더라도 모든 유저 화면에서 정상적으로 게이지 변동과 타임아웃을 체크합니다.
+    miniGameTimer--;
+    
     if (isReferee) {
-        miniGameTimer--;
         socket.emit("syncMiniGameTick", { gauge: miniGameGauge, timer: miniGameTimer });
-
-        if (miniGameGauge <= 5) socket.emit("syncEndMiniGame", true); 
-        else if (miniGameGauge >= 95 || miniGameTimer <= 0) socket.emit("syncEndMiniGame", false); 
     }
+
+    if (miniGameGauge <= 5) {
+        if (isReferee || myControllingPlayer === activeDefender) socket.emit("syncEndMiniGame", true); 
+    } 
+    else if (miniGameGauge >= 95 || miniGameTimer <= 0) {
+        if (isReferee || myControllingPlayer === activeAttacker) socket.emit("syncEndMiniGame", false); 
+    } 
 }
 
 function endMiniGame(isDefenderWin) {
@@ -817,6 +830,9 @@ function endMiniGame(isDefenderWin) {
     miniGameUI.style.display = "none";
     ball.ignoreWalls = false;
     ball.isChecking = false;
+
+    // [버그 방지] 미니게임 종료 직후 키 버퍼를 강제로 초기화하여 자동 슛 발동 현상을 완전히 차단합니다.
+    keys = {};
 
     if (isDefenderWin) {
         ball.holder = activeDefender;

@@ -192,7 +192,7 @@
         </select>
         <button id="startBtn" onclick="startGame()" disabled>▶ GAME START</button>
         <button id="pauseBtn" onclick="togglePause()" disabled>⏸ PAUSE</button>
-        <button id="resetBtn" onclick="triggerManualReset()" disabled>RESET MATCH</button>
+        <button id="resetBtn" onclick="triggerManualReset()" disabled>🔄 RESET MATCH</button>
         <span id="statusText" style="color: #f1c40f; margin-left: 5px;">[관전자 모드] 코드를 입력하세요.</span>
     </div>
     
@@ -203,7 +203,7 @@
             <div class="progress-bar">
                 <div id="progress"></div>
             </div>
-            <div id="miniGameVS" style="font-size:12px; margin-top:5px; color:#ccc;">수비 VS 공격</div>
+            <div id="miniGameVS" style="font-size:12px; margin-top:5px; color:#ccc;">수비수 VS 공격수</div>
         </div>
         <canvas id="gameCanvas" width="1000" height="500"></canvas>
     </div>
@@ -372,6 +372,7 @@ const ball = {
     vy: 0,
     holder: null,
     isFlying: false,
+    ignoreWalls: false, // 골대 안을 지날 때 벽 충돌을 무시하기 위한 플래그
 
     draw() {
         ctx.beginPath();
@@ -391,6 +392,7 @@ const ball = {
             const dribbleY = Math.sin(Date.now() * 0.012) * 6;
             this.x = this.holder.x + Math.cos(this.holder.angle) * 14;
             this.y = this.holder.y + Math.sin(this.holder.angle) * 14 + dribbleY;
+            this.ignoreWalls = false;
         } else if (this.isFlying) {
             this.x += this.vx;
             this.y += this.vy;
@@ -400,29 +402,48 @@ const ball = {
             const distToRight = Math.hypot(this.x - court.rightGoal.x, this.y - court.rightGoal.y);
             const distToLeft = Math.hypot(this.x - court.leftGoal.x, this.y - court.leftGoal.y);
 
-            // [심판 권한 브라우저에서만 확정적 연산 처리하여 전역 동기화 꼬임 버그 수정]
+            // 공이 골대 원(반지름 20)을 지나가는 중인지 감지
+            if (distToRight < court.rightGoal.radius || distToLeft < court.leftGoal.radius) {
+                this.ignoreWalls = true; // 골대 영역 안에서는 외곽 벽 충돌을 무시하여 관통 유도
+            } else {
+                this.ignoreWalls = false;
+            }
+
+            // 오직 심판 브라우저에서만 정확히 조율된 확률 판정 실행
             if (isReferee) {
                 if (distToRight < court.rightGoal.radius) this.checkGoalProbability("BLUE");
                 if (distToLeft < court.leftGoal.radius) this.checkGoalProbability("RED");
             }
 
-            if (Math.abs(this.vx) < 0.3 && Math.abs(this.vy) < 0.3) this.isFlying = false;
+            if (Math.abs(this.vx) < 0.3 && Math.abs(this.vy) < 0.3) {
+                this.isFlying = false;
+                this.ignoreWalls = false;
+            }
         }
 
-        if (this.x < this.radius || this.x > court.width - this.radius) this.vx *= -1;
-        if (this.y < this.radius || this.y > court.height - this.radius) this.vy *= -1;
+        // 일반 필드 벽면 충돌 연산 (골대 무시 플래그가 꺼져 있을 때만 작동하도록 수정)
+        if (!this.ignoreWalls) {
+            if (this.x < this.radius || this.x > court.width - this.radius) this.vx *= -1;
+            if (this.y < this.radius || this.y > court.height - this.radius) this.vy *= -1;
+        }
         this.x = Math.max(this.radius, Math.min(court.width - this.radius, this.x));
         this.y = Math.max(this.radius, Math.min(court.height - this.radius, this.y));
     },
 
+    // 지정해주신 경기력 레벨별 계단식 확률 시스템 완벽 적용
     checkGoalProbability(goalTeam) {
         const shooterLv = ball.lastShooterSkill || 5.0;
+        let successChance = 0.50; // 기본 5.0~5.9 구간 성공률
+
+        if (shooterLv >= 6.0 && shooterLv < 7.0) successChance = 0.60;
+        else if (shooterLv >= 7.0 && shooterLv < 8.0) successChance = 0.70;
+        else if (shooterLv >= 8.0 && shooterLv < 9.0) successChance = 0.80;
+        else if (shooterLv >= 9.0) successChance = 0.90;
         
-        // 보정된 골 성공 확률 연산식 (5.0v = 50%, 9.9v = 95%)
-        let scoreSuccessChance = 0.50 + ((shooterLv - 5.0) / 4.9) * 0.45;
-        
-        if (Math.random() < scoreSuccessChance) {
+        if (Math.random() < successChance) {
+            // 골인 성공!
             this.isFlying = false;
+            this.ignoreWalls = false;
             if (goalTeam === "BLUE") { scoreBlue += 2; }
             else { scoreRed += 2; }
             
@@ -431,11 +452,26 @@ const ball = {
             socket.emit("syncScore", { blue: scoreBlue, red: scoreRed });
             this.resetBall();
         } else {
-            // 확률 패배 시 리얼하게 역방향 난반사 튕겨내기 구현
-            this.vx = -this.vx * 1.05; 
-            this.vy = (Math.random() - 0.5) * 11; 
-            this.x += this.vx * 2; 
-            socket.emit("syncBallAction", { x: this.x, y: this.y, vx: this.vx, vy: this.vy, holderId: null, isFlying: true, lastShooterSkill: shooterLv });
+            // [오류 수정] 확률 실패 시 골대 원 중간(중심부) 영역에서 랜덤한 범위/각도로 강하게 튕겨내기!
+            const randomAngle = Math.random() * Math.PI * 2; // 0~360도 전방위 난반사
+            const bouncePower = 10 + Math.random() * 5; // 속도감 있는 튕김
+            
+            this.vx = Math.cos(randomAngle) * bouncePower;
+            this.vy = Math.sin(randomAngle) * bouncePower;
+            
+            // 판정 루프 즉시 탈출을 위해 원 밖으로 공의 위치 살짝 이동
+            this.x += this.vx * 1.5;
+            this.ignoreWalls = false;
+
+            socket.emit("syncBallAction", { 
+                x: this.x, 
+                y: this.y, 
+                vx: this.vx, 
+                vy: this.vy, 
+                holderId: null, 
+                isFlying: true, 
+                lastShooterSkill: shooterLv 
+            });
         }
     },
 
@@ -445,6 +481,8 @@ const ball = {
         this.vx = 0;
         this.vy = 0;
         this.holder = null;
+        this.isFlying = false;
+        this.ignoreWalls = false;
         this.lastShooterSkill = 5.0;
         if (isReferee) {
             socket.emit("syncBallAction", { x: 500, y: 250, vx: 0, vy: 0, holderId: null, isFlying: false });
@@ -590,6 +628,7 @@ function shootAction(player) {
     if (gameState === "PAUSE") return;
     ball.holder = null;
     ball.isFlying = true;
+    ball.ignoreWalls = false;
     
     const power = 14;
     ball.vx = Math.cos(player.angle) * power;
@@ -611,6 +650,7 @@ function passAction(player) {
     if (gameState === "PAUSE") return;
     ball.holder = null;
     ball.isFlying = true;
+    ball.ignoreWalls = false;
     const power = 11;
     ball.vx = Math.cos(player.angle) * power;
     ball.vy = Math.sin(player.angle) * power;
@@ -702,6 +742,7 @@ function checkManualBallGrab(player) {
     const dist = Math.hypot(ball.x - player.x, ball.y - player.y);
     if (dist < player.radius + ball.radius + 15) { 
         ball.holder = player;
+        ball.ignoreWalls = false;
         socket.emit("syncBallAction", { x: ball.x, y: ball.y, vx: 0, vy: 0, holderId: { team: player.team, id: player.id }, isFlying: false });
     }
 }
@@ -751,14 +792,13 @@ function updateMiniGame() {
     }
 }
 
-// [디펜스 승리 시 실시간 소유권 이전 동기화 누락 버그 해결 완료]
 function endMiniGame(isDefenderWin) {
     gameState = "PLAYING";
     miniGameUI.style.display = "none";
+    ball.ignoreWalls = false;
 
     if (isDefenderWin) {
         ball.holder = activeDefender;
-        // 심판 브라우저가 승리 판정을 취합하여 소유권 이전을 즉시 소켓 패킷으로 강제 방송합니다.
         if (isReferee) {
             socket.emit("syncBallAction", { 
                 x: ball.x, 
@@ -773,7 +813,6 @@ function endMiniGame(isDefenderWin) {
         const angle = Math.atan2(activeDefender.y - activeAttacker.y, activeDefender.x - activeAttacker.x);
         activeDefender.x += Math.cos(angle) * 50;
         activeDefender.y += Math.sin(angle) * 50;
-        // 공격수 승리 시 밀려난 수비수의 실시간 위치 패킷 동기화 전송
         if (isReferee) {
             socket.emit("syncPlayerMove", { team: activeDefender.team, id: activeDefender.id, x: activeDefender.x, y: activeDefender.y, angle: activeDefender.angle });
         }

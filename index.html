@@ -192,7 +192,7 @@
         </select>
         <button id="startBtn" onclick="startGame()" disabled>▶ GAME START</button>
         <button id="pauseBtn" onclick="togglePause()" disabled>⏸ PAUSE</button>
-        <button id="resetBtn" onclick="triggerManualReset()" disabled>RESET MATCH</button>
+        <button id="resetBtn" onclick="triggerManualReset()" disabled>🔄 RESET MATCH</button>
         <span id="statusText" style="color: #f1c40f; margin-left: 5px;">[관전자 모드] 코드를 입력하세요.</span>
     </div>
     
@@ -373,6 +373,8 @@ const ball = {
     holder: null,
     isFlying: false,
     ignoreWalls: false, 
+    isChecking: false, 
+    lastShooterSkill: 5.0,
 
     draw() {
         ctx.beginPath();
@@ -393,6 +395,7 @@ const ball = {
             this.x = this.holder.x + Math.cos(this.holder.angle) * 14;
             this.y = this.holder.y + Math.sin(this.holder.angle) * 14 + dribbleY;
             this.ignoreWalls = false;
+            this.isChecking = false;
         } else if (this.isFlying) {
             this.x += this.vx;
             this.y += this.vy;
@@ -402,23 +405,31 @@ const ball = {
             const distToRight = Math.hypot(this.x - court.rightGoal.x, this.y - court.rightGoal.y);
             const distToLeft = Math.hypot(this.x - court.leftGoal.x, this.y - court.leftGoal.y);
 
-            // [보정] 고속 이동 시 프레임 스킵 방지를 위해 감지 범위를 살짝 확장 (radius + 10)
-            if (distToRight < court.rightGoal.radius + 10 || distToLeft < court.leftGoal.radius + 10) {
+            // [보정] 고속 슛 패스 시 감지 누락이 절대 생기지 않도록 마진 영역을 25로 크게 확장
+            if (distToRight < court.rightGoal.radius + 25 || distToLeft < court.leftGoal.radius + 25) {
                 this.ignoreWalls = true; 
             } else {
                 this.ignoreWalls = false;
+                this.isChecking = false; 
             }
 
-            // [오류 수정] 골대 방향 매칭을 정상적으로 바로잡음
-            // 오른쪽 골대(distToRight)를 통과하면 블루팀이 득점할 기회, 왼쪽 골대(distToLeft)를 통과하면 레드팀이 득점할 기회
-            if (isReferee) {
-                if (distToRight < court.rightGoal.radius + 10) this.checkGoalProbability("BLUE");
-                if (distToLeft < court.leftGoal.radius + 10) this.checkGoalProbability("RED");
+            // [해결] 이 인지 판정문에서 심판 조건(isReferee)을 완전히 제외시켰습니다!
+            // 이제 심판 인증을 안 한 일반 테스트 브라우저 환경에서도 골대 인식이 무조건 켜집니다.
+            if (!this.isChecking) {
+                if (distToRight < court.rightGoal.radius + 25) {
+                    this.isChecking = true;
+                    this.checkGoalProbability("BLUE"); 
+                }
+                else if (distToLeft < court.leftGoal.radius + 25) {
+                    this.isChecking = true;
+                    this.checkGoalProbability("RED"); 
+                }
             }
 
             if (Math.abs(this.vx) < 0.3 && Math.abs(this.vy) < 0.3) {
                 this.isFlying = false;
                 this.ignoreWalls = false;
+                this.isChecking = false;
             }
         }
 
@@ -430,8 +441,8 @@ const ball = {
         this.y = Math.max(this.radius, Math.min(court.height - this.radius, this.y));
     },
 
-    checkGoalProbability(goalTeam) {
-        const shooterLv = ball.lastShooterSkill || 5.0;
+    checkGoalProbability(scoringTeam) {
+        const shooterLv = this.lastShooterSkill || 5.0;
         let successChance = 0.50; 
 
         if (shooterLv >= 6.0 && shooterLv < 7.0) successChance = 0.60;
@@ -442,34 +453,41 @@ const ball = {
         if (Math.random() < successChance) {
             this.isFlying = false;
             this.ignoreWalls = false;
-            if (goalTeam === "BLUE") { scoreBlue += 2; }
+            this.isChecking = false;
+
+            // 오직 실제 심판 역할을 위임받은 클라이언트나 첫 생성 브라우저가 점수 변동을 서버에 동기화 요청함
+            if (scoringTeam === "BLUE") { scoreBlue += 2; }
             else { scoreRed += 2; }
             
             document.getElementById("score1").innerText = scoreBlue;
             document.getElementById("score2").innerText = scoreRed;
-            socket.emit("syncScore", { blue: scoreBlue, red: scoreRed });
+            
+            if (isReferee) {
+                socket.emit("syncScore", { blue: scoreBlue, red: scoreRed });
+            }
             this.resetBall();
         } else {
-            // 확률 패배 시 골대 원 중심부 근처에서 사방으로 리얼하게 튕겨나가도록 연출
+            // 확률 골인 실패 시 현실적인 림 튕김 이펙트 구현
             const randomAngle = Math.random() * Math.PI * 2; 
             const bouncePower = 11 + Math.random() * 4; 
             
             this.vx = Math.cos(randomAngle) * bouncePower;
             this.vy = Math.sin(randomAngle) * bouncePower;
             
-            // 중복 판정을 피하기 위해 골대 충돌 범위 밖으로 강제 한 프레임 이동
             this.x += this.vx * 1.5;
             this.ignoreWalls = false;
 
-            socket.emit("syncBallAction", { 
-                x: this.x, 
-                y: this.y, 
-                vx: this.vx, 
-                vy: this.vy, 
-                holderId: null, 
-                isFlying: true, 
-                lastShooterSkill: shooterLv 
-            });
+            if (isReferee) {
+                socket.emit("syncBallAction", { 
+                    x: this.x, 
+                    y: this.y, 
+                    vx: this.vx, 
+                    vy: this.vy, 
+                    holderId: null, 
+                    isFlying: true, 
+                    lastShooterSkill: shooterLv 
+                });
+            }
         }
     },
 
@@ -481,6 +499,7 @@ const ball = {
         this.holder = null;
         this.isFlying = false;
         this.ignoreWalls = false;
+        this.isChecking = false;
         this.lastShooterSkill = 5.0;
         if (isReferee) {
             socket.emit("syncBallAction", { x: 500, y: 250, vx: 0, vy: 0, holderId: null, isFlying: false });
@@ -627,11 +646,12 @@ function shootAction(player) {
     ball.holder = null;
     ball.isFlying = true;
     ball.ignoreWalls = false;
+    ball.isChecking = false;
     
     const power = 14;
     ball.vx = Math.cos(player.angle) * power;
     ball.vy = Math.sin(player.angle) * power;
-    ball.lastShooterSkill = player.skillLevel;
+    ball.lastShooterSkill = player.skillLevel || 5.0;
 
     socket.emit("syncBallAction", { 
         x: ball.x, 
@@ -640,7 +660,7 @@ function shootAction(player) {
         vy: ball.vy, 
         holderId: null, 
         isFlying: true,
-        lastShooterSkill: player.skillLevel
+        lastShooterSkill: player.skillLevel || 5.0
     });
 }
 
@@ -649,6 +669,7 @@ function passAction(player) {
     ball.holder = null;
     ball.isFlying = true;
     ball.ignoreWalls = false;
+    ball.isChecking = false;
     const power = 11;
     ball.vx = Math.cos(player.angle) * power;
     ball.vy = Math.sin(player.angle) * power;
@@ -741,6 +762,7 @@ function checkManualBallGrab(player) {
     if (dist < player.radius + ball.radius + 15) { 
         ball.holder = player;
         ball.ignoreWalls = false;
+        ball.isChecking = false;
         socket.emit("syncBallAction", { x: ball.x, y: ball.y, vx: 0, vy: 0, holderId: { team: player.team, id: player.id }, isFlying: false });
     }
 }
@@ -794,6 +816,7 @@ function endMiniGame(isDefenderWin) {
     gameState = "PLAYING";
     miniGameUI.style.display = "none";
     ball.ignoreWalls = false;
+    ball.isChecking = false;
 
     if (isDefenderWin) {
         ball.holder = activeDefender;

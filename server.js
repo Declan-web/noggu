@@ -23,6 +23,7 @@ let roomState = {
     scoreRed: 0,
     registeredOwners: [],
     directorName: null, 
+    directorSocketId: null, 
     logs: [] 
 };
 
@@ -96,8 +97,12 @@ io.on('connection', (socket) => {
 
     socket.on('syncRegisterDirector', (name) => {
         roomState.directorName = name;
+        roomState.directorSocketId = socket.id;
         addServerLog(`[감독 임명] [${name}] 님이 방의 공식 감독(심판)으로 취임하셨습니다.`);
-        io.emit('onRegisterDirector', name);
+        io.emit('onRegisterDirector', {
+            directorName: roomState.directorName,
+            directorSocketId: roomState.directorSocketId
+        });
     });
 
     socket.on('syncStartGame', (data) => {
@@ -172,6 +177,13 @@ io.on('connection', (socket) => {
     });
 
     socket.on('disconnect', () => {
+        if (socket.id === roomState.directorSocketId) {
+            addServerLog(`[공지] 감독 [${roomState.directorName}] 님이 퇴장하여 감독 직위가 공석이 되었습니다.`);
+            roomState.directorName = null;
+            roomState.directorSocketId = null;
+            io.emit('onRegisterDirector', { directorName: null, directorSocketId: null });
+        }
+
         const leftPlayer = roomState.registeredOwners.find(p => p.socketId === socket.id);
         if (leftPlayer) {
             const teamMark = leftPlayer.team === 'BLUE' ? '[BLUE]' : '[RED]';

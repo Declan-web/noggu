@@ -142,7 +142,6 @@
             flex-direction: column;
             gap: 10px;
             word-break: break-all;
-            /* 띄어쓰기 및 연속 공백이 브라우저에서 생략되지 않고 그대로 표기되도록 강제 지정 */
             white-space: pre-wrap; 
         }
         
@@ -498,38 +497,7 @@ class Player {
         }
     }
 
-    updateAI(dt) {
-        // [수정] 사람이 지정된 칸(ownerName 존재)이면 AI 로직의 자율 이동을 엄격히 차단합니다.
-        if (gameState !== "PLAYING" || this.ownerName) return;
-
-        let dx = 0, dy = 0;
-        if (ball.holder === this) {
-            this.angle = this.team === "BLUE" ? 0 : Math.PI;
-            const targetGoal = this.team === "BLUE" ? court.rightGoal : court.leftGoal;
-            const distToGoal = Math.hypot(targetGoal.x - this.x, targetGoal.y - this.y);
-            if (distToGoal > 160) {
-                dx = targetGoal.x - this.x;
-                dy = targetGoal.y - this.y;
-            } else if (Math.random() < 0.02) {
-                shootAction(this);
-            }
-        } else {
-            if (!ball.holder) {
-                dx = ball.x - this.x;
-                dy = ball.y - this.y;
-            }
-        }
-
-        if (dx !== 0 || dy !== 0) {
-            const length = Math.hypot(dx, dy);
-            this.move(dx / length, dy / length, dt);
-            
-            if (!ball.holder && !ball.isFlying && Math.hypot(ball.x - this.x, ball.y - this.y) < this.radius + ball.radius + 2) {
-                ball.holder = this;
-                socket.emit("syncBallAction", { x: ball.x, y: ball.y, vx: 0, vy: 0, holderId: { team: this.team, id: this.id }, isFlying: false });
-            }
-        }
-    }
+    // [수정] AI 자율 행동 로직(updateAI) 완전 소멸 및 파괴
 }
 
 const ball = {
@@ -846,7 +814,7 @@ function passAction(player) {
 
 function sendDirectorChat() {
     const input = document.getElementById("directorChatMsg");
-    const text = input.value; // [수정] trim() 처리로 연속된 공백이나 양끝 띄어쓰기가 파괴되는 현상을 보존하기 위해 원본 값을 가져옵니다.
+    const text = input.value; 
     if(!text.trim()) return;
     socket.emit('sendDirectorChat', text);
     input.value = "";
@@ -861,7 +829,7 @@ function appendLogToUI(log) {
     timeSpan.innerText = `[${log.timestamp}]`;
     
     const msgSpan = document.createElement("span");
-    msgSpan.innerText = log.message; // pre-wrap 스타일에 의해 스페이스바 입력값들이 정직하게 렌더링됩니다.
+    msgSpan.innerText = log.message; 
     
     logItem.appendChild(timeSpan);
     logItem.appendChild(msgSpan);
@@ -935,7 +903,6 @@ canvas.addEventListener("mousedown", e => {
 
 window.addEventListener("keydown", e => {
     if (e.key === " " || e.key === "Enter" || e.key.toLowerCase() === "shift") {
-        // 채팅창 포커스 중일 때는 브라우저 기본 스페이스바 스크롤 현상 차단 메커니즘을 예외처리하여 타자 입력을 허용합니다.
         if (document.activeElement !== document.getElementById("directorChatMsg")) {
             e.preventDefault();
         }
@@ -1074,15 +1041,7 @@ function update(dt) {
             }
         }
 
-        activePlayers.forEach(p => {
-            // [수정] 감독 화면이든 관전자 화면이든 ownerName이 바인딩된 칸은 절대로 AI 자율 구동을 수행하지 않습니다.
-            if (!p.ownerName && isReferee) {
-                p.updateAI(dt); 
-                socket.emit("syncPlayerMove", { team: p.team, id: p.id, x: p.x, y: p.y, angle: p.angle });
-            }
-        });
-
-        ball.update(dt); 
+        // [수정] AI 자율 구동 루프 및 호스팅 처리를 완전히 도려내어 이제 아무도 멋대로 움직이지 않습니다.
         if (isReferee) {
             socket.emit("syncBallLocation", { x: ball.x, y: ball.y, vx: ball.vx, vy: ball.vy, isFlying: ball.isFlying });
         }
@@ -1335,7 +1294,6 @@ socket.on("onStartGame", (data) => {
     toggleUIVisibility();
 });
 
-// [수정] 게임 초기화 수신부 개편: 내 선택 캐릭터 탈락(null), 로그 창을 즉시 깔끔하게 폭파 비움
 socket.on("onResetMatch", () => {
     gameState = "SETUP";
     scoreBlue = 0; scoreRed = 0;
@@ -1345,8 +1303,8 @@ socket.on("onResetMatch", () => {
     document.getElementById("score2").innerText = 0;
     defenseLockUntil = 0;
     
-    myControllingPlayer = null;      // 내가 잡고 있던 제어 캐릭터 취소
-    logContainer.innerHTML = "";     // 안내문 한 줄 없이 즉각 로그 삭제 
+    myControllingPlayer = null;      
+    logContainer.innerHTML = "";     
     
     buildActivePlayersPool();
     ball.resetBall();

@@ -496,8 +496,6 @@ class Player {
             this.angle = Math.atan2(dy, dx);
         }
     }
-
-    // [수정] AI 자율 행동 로직(updateAI) 완전 소멸 및 파괴
 }
 
 const ball = {
@@ -646,16 +644,54 @@ const allSpawnPositions = {
 let activePlayers = [];
 
 function buildActivePlayersPool() {
+    // 기존 유저 데이터 매핑 보존을 위한 백업 생성
+    const backupMap = {};
+    activePlayers.forEach(p => {
+        if (p.ownerName) {
+            backupMap[`${p.team}_${p.id}`] = {
+                ownerName: p.ownerName,
+                socketId: p.socketId,
+                skillLevel: p.skillLevel
+            };
+        }
+    });
+
     activePlayers = [];
     registeredNames.clear();
 
     for(let i = 0; i < maxBluePlayers; i++) {
         let bPos = allSpawnPositions.BLUE[i];
-        activePlayers.push(new Player(bPos.x, bPos.y, "BLUE", i+1, i));
+        let p = new Player(bPos.x, bPos.y, "BLUE", i+1, i);
+        let bk = backupMap[`BLUE_${i+1}`];
+        if (bk) {
+            p.ownerName = bk.ownerName;
+            p.socketId = bk.socketId;
+            p.skillLevel = bk.skillLevel;
+            registeredNames.add(bk.ownerName);
+        }
+        activePlayers.push(p);
     }
     for(let i = 0; i < maxRedPlayers; i++) {
         let rPos = allSpawnPositions.RED[i];
-        activePlayers.push(new Player(rPos.x, rPos.y, "RED", i+1, i));
+        let p = new Player(rPos.x, rPos.y, "RED", i+1, i);
+        let bk = backupMap[`RED_${i+1}`];
+        if (bk) {
+            p.ownerName = bk.ownerName;
+            p.socketId = bk.socketId;
+            p.skillLevel = bk.skillLevel;
+            registeredNames.add(bk.ownerName);
+        }
+        activePlayers.push(p);
+    }
+
+    // 재생성된 배열 기반으로 내 캐릭터 실시간 동기화 업데이트 
+    if (myControllingPlayer) {
+        const found = activePlayers.find(p => p.team === myControllingPlayer.team && p.id === myControllingPlayer.id);
+        if (found && found.socketId === socket.id) {
+            myControllingPlayer = found;
+        } else {
+            myControllingPlayer = null;
+        }
     }
     updateAdminDropdown();
 }
@@ -1041,7 +1077,6 @@ function update(dt) {
             }
         }
 
-        // [수정] AI 자율 구동 루프 및 호스팅 처리를 완전히 도려내어 이제 아무도 멋대로 움직이지 않습니다.
         if (isReferee) {
             socket.emit("syncBallLocation", { x: ball.x, y: ball.y, vx: ball.vx, vy: ball.vy, isFlying: ball.isFlying });
         }
@@ -1290,6 +1325,7 @@ socket.on("onStartGame", (data) => {
     maxBluePlayers = data.maxBluePlayers;
     maxRedPlayers = data.maxRedPlayers;
     gameState = "PLAYING";
+    // [핵심 변경] 재생성 루틴을 돌려도 유저 바인딩 및 조작 전역 권한이 안전하게 보존됩니다.
     buildActivePlayersPool();
     toggleUIVisibility();
 });

@@ -462,7 +462,7 @@ class Player {
         let dx = 0, dy = 0;
         if (ball.holder === this) {
             this.angle = this.team === "BLUE" ? 0 : Math.PI;
-            const targetGoal = this.team === "BLUE" ? court.rightGoal; : court.leftGoal;
+            const targetGoal = this.team === "BLUE" ? court.rightGoal : court.leftGoal;
             const distToGoal = Math.hypot(targetGoal.x - this.x, targetGoal.y - this.y);
             if (distToGoal > 160) {
                 dx = targetGoal.x - this.x;
@@ -697,30 +697,7 @@ function authReferee() {
     }
 
     if (inputKey === "KEY") {
-        isReferee = true;
-        myDirectorName = inputName;
-        alert(`[${inputName}] 감독 권한 인증 성공!`);
-        
         socket.emit("syncRegisterDirector", inputName);
-
-        document.getElementById("matchType").disabled = false;
-        document.getElementById("startBtn").disabled = false;
-        pauseBtn.disabled = false;
-        resetBtn.disabled = false;
-        document.getElementById("teamNameBlueInput").disabled = false;
-        document.getElementById("teamNameRedInput").disabled = false;
-        document.getElementById("refereeZone").style.display = "none"; 
-        
-        const label = document.getElementById("directorTitleLabel");
-        label.innerText = `[감독] ${inputName}`;
-        document.getElementById("adminSkillZone").style.display = "flex"; 
-        chatInputZone.style.display = "flex"; 
-        
-        updateAdminDropdown();
-        
-        if(gameState === "SETUP") {
-            statusText.innerText = "[대기 모드] 세팅 후 시작하세요.";
-        }
     } else {
         alert("잘못된 심판 코드입니다!");
     }
@@ -1110,8 +1087,11 @@ socket.on("onInitRoomState", (serverRoom) => {
         document.getElementById("refereeZone").style.display = "none";
         const label = document.getElementById("directorTitleLabel");
         label.innerText = `[감독] ${serverRoom.directorName}`;
-        if(isReferee) {
+        if(socket.id === serverRoom.directorSocketId) {
+            isReferee = true;
+            myDirectorName = serverRoom.directorName;
             document.getElementById("adminSkillZone").style.display = "flex";
+            chatInputZone.style.display = "flex";
         }
     }
 
@@ -1238,10 +1218,39 @@ socket.on("onLiveTeamName", (data) => {
     }
 });
 
-socket.on("onRegisterDirector", (name) => {
-    document.getElementById("refereeZone").style.display = "none";
-    const label = document.getElementById("directorTitleLabel");
-    label.innerText = `[감독] ${name}`;
+socket.on("onRegisterDirector", (data) => {
+    if (data && data.directorName) {
+        document.getElementById("refereeZone").style.display = "none";
+        const label = document.getElementById("directorTitleLabel");
+        label.innerText = `[감독] ${data.directorName}`;
+        
+        if (socket.id === data.directorSocketId) {
+            isReferee = true;
+            myDirectorName = data.directorName;
+            
+            document.getElementById("matchType").disabled = false;
+            document.getElementById("startBtn").disabled = (gameState !== "SETUP");
+            pauseBtn.disabled = (gameState === "SETUP");
+            resetBtn.disabled = false;
+            document.getElementById("teamNameBlueInput").disabled = false;
+            document.getElementById("teamNameRedInput").disabled = false;
+            document.getElementById("adminSkillZone").style.display = "flex"; 
+            chatInputZone.style.display = "flex";
+            
+            alert(`[${data.directorName}] 감독 권한 인증에 성공했습니다.`);
+        }
+        updateAdminDropdown();
+    } else {
+        document.getElementById("refereeZone").style.display = "flex";
+        document.getElementById("directorTitleLabel").innerText = "";
+        document.getElementById("adminSkillZone").style.display = "none";
+        chatInputZone.style.display = "none";
+        if (isReferee) {
+            isReferee = false;
+            toggleUIVisibility();
+        }
+    }
+    toggleUIVisibility();
 });
 
 socket.on("onStartGame", (data) => {

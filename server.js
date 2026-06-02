@@ -49,7 +49,6 @@ io.on('connection', (socket) => {
     socket.emit('onInitRoomState', roomState);
 
     socket.on('syncPlayerMove', (data) => {
-        // 이동 패킷이 올 때 서버 메모리의 플레이어 위치 및 각도도 최신화하여 AI 판단에 섞이지 않게 조율합니다.
         const p = roomState.registeredOwners.find(o => o.team === data.team && o.id === data.id);
         if (p) {
             p.x = data.x;
@@ -122,20 +121,18 @@ io.on('connection', (socket) => {
         io.emit('onStartGame', data);
     });
 
-    // 초기화 시 안내 문구를 남기지 않고 완벽하게 모든 유저 선택 정보와 로그를 삭제합니다.
     socket.on('syncResetMatch', () => {
         roomState.gameState = "SETUP";
         roomState.scoreBlue = 0;
         roomState.scoreRed = 0;
         roomState.maxBluePlayers = 5;
         roomState.maxRedPlayers = 5;
-        roomState.registeredOwners = []; // 유저 선택 상태 전체 비우기 (선택 취소)
-        roomState.logs = [];             // 서버 로그 배열 완전 초기화
+        roomState.registeredOwners = []; 
+        roomState.logs = [];             
         prePauseState = "SETUP";
         io.emit('onResetMatch');
     });
 
-    // 로그 초기화 요청 시 안내 문구를 출력하지 않습니다.
     socket.on('syncClearLogs', () => {
         if (socket.id === roomState.directorSocketId) {
             roomState.logs = [];

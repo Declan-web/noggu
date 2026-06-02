@@ -98,7 +98,7 @@ io.on('connection', (socket) => {
     socket.on('syncRegisterDirector', (name) => {
         roomState.directorName = name;
         roomState.directorSocketId = socket.id;
-        addServerLog(`[감독 임명] [${name}] 님이 방의 공식 감독(심판)으로 취임하셨습니다.`);
+        // 감독 취임 안내 멘트 로그 전면 제거
         io.emit('onRegisterDirector', {
             directorName: roomState.directorName,
             directorSocketId: roomState.directorSocketId
@@ -122,6 +122,15 @@ io.on('connection', (socket) => {
         prePauseState = "SETUP";
         io.emit('onResetMatch');
         addServerLog(`[초기화] 매치가 전면 초기화되었습니다. 캐릭터를 다시 선택해주세요.`);
+    });
+
+    // 감독 전용 로그 초기화 요청 처리
+    socket.on('syncClearLogs', () => {
+        if (socket.id === roomState.directorSocketId) {
+            roomState.logs = [];
+            io.emit('onClearLogs');
+            addServerLog(`[알림] 감독에 의해 로그 창이 초기화되었습니다.`);
+        }
     });
 
     socket.on('syncTogglePause', () => {
@@ -161,8 +170,11 @@ io.on('connection', (socket) => {
         io.emit('onMiniGameHit', gauge);
     });
 
+    // 중복 로그 방지: 디펜스 결과 로그는 서버에서 1등으로 수신했을 때 딱 1번만 기록하도록 강제 단일화
     socket.on('syncEndMiniGame', (data) => {
+        if (roomState.gameState !== "MINIGAME") return; 
         roomState.gameState = "PLAYING";
+        
         if (data.isDefWin) {
             addServerLog(`[디펜스 성공] 수비가 성공하여 공을 스틸했습니다!`, "defense");
         } else {

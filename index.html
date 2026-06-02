@@ -142,6 +142,8 @@
             flex-direction: column;
             gap: 10px;
             word-break: break-all;
+            /* 띄어쓰기 및 연속 공백이 브라우저에서 생략되지 않고 그대로 표기되도록 강제 지정 */
+            white-space: pre-wrap; 
         }
         
         .log-item {
@@ -366,7 +368,6 @@ let scoreRed = 0;
 let teamBlueName = "TEAM BLUE";
 let teamRedName = "TEAM RED";
 
-// 설정 인원 한도 변수 (기본값 5 vs 5)
 let maxBluePlayers = 5;
 let maxRedPlayers = 5;
 
@@ -423,7 +424,6 @@ class Player {
     }
 
     draw() {
-        // 지정된 칸 범위를 초과하는 플레이어는 대기 상태(SETUP) 화면에 그리지 않습니다.
         if (gameState === "SETUP") {
             if (this.team === "BLUE" && this.id > maxBluePlayers) return;
             if (this.team === "RED" && this.id > maxRedPlayers) return;
@@ -499,6 +499,7 @@ class Player {
     }
 
     updateAI(dt) {
+        // [수정] 사람이 지정된 칸(ownerName 존재)이면 AI 로직의 자율 이동을 엄격히 차단합니다.
         if (gameState !== "PLAYING" || this.ownerName) return;
 
         let dx = 0, dy = 0;
@@ -676,17 +677,14 @@ const allSpawnPositions = {
 
 let activePlayers = [];
 
-// 감독 설정 인원 한도만큼 실동작 캐릭터 풀을 유연하게 빌드합니다.
 function buildActivePlayersPool() {
     activePlayers = [];
     registeredNames.clear();
 
-    // 블루팀 인원 한도만큼 생성
     for(let i = 0; i < maxBluePlayers; i++) {
         let bPos = allSpawnPositions.BLUE[i];
         activePlayers.push(new Player(bPos.x, bPos.y, "BLUE", i+1, i));
     }
-    // 레드팀 인원 한도만큼 생성
     for(let i = 0; i < maxRedPlayers; i++) {
         let rPos = allSpawnPositions.RED[i];
         activePlayers.push(new Player(rPos.x, rPos.y, "RED", i+1, i));
@@ -805,7 +803,7 @@ function startGame() {
 function triggerManualReset() {
     if (!isReferee) return;
     resetBtn.blur();
-    if(confirm("정말로 전체 경기를 처음 상태로 완전히 초기화하시겠습니까?")) {
+    if(confirm("정말로 전체 경기를 처음 상태로 완전히 초기화하시겠습니까? (캐릭터 선택 및 모든 로그 소멸)")) {
         socket.emit("syncResetMatch");
     }
 }
@@ -848,8 +846,8 @@ function passAction(player) {
 
 function sendDirectorChat() {
     const input = document.getElementById("directorChatMsg");
-    const text = input.value.trim();
-    if(!text) return;
+    const text = input.value; // [수정] trim() 처리로 연속된 공백이나 양끝 띄어쓰기가 파괴되는 현상을 보존하기 위해 원본 값을 가져옵니다.
+    if(!text.trim()) return;
     socket.emit('sendDirectorChat', text);
     input.value = "";
 }
@@ -863,7 +861,7 @@ function appendLogToUI(log) {
     timeSpan.innerText = `[${log.timestamp}]`;
     
     const msgSpan = document.createElement("span");
-    msgSpan.innerText = log.message;
+    msgSpan.innerText = log.message; // pre-wrap 스타일에 의해 스페이스바 입력값들이 정직하게 렌더링됩니다.
     
     logItem.appendChild(timeSpan);
     logItem.appendChild(msgSpan);
@@ -936,7 +934,12 @@ canvas.addEventListener("mousedown", e => {
 });
 
 window.addEventListener("keydown", e => {
-    if (e.key === " " || e.key === "Enter" || e.key.toLowerCase() === "shift") e.preventDefault(); 
+    if (e.key === " " || e.key === "Enter" || e.key.toLowerCase() === "shift") {
+        // 채팅창 포커스 중일 때는 브라우저 기본 스페이스바 스크롤 현상 차단 메커니즘을 예외처리하여 타자 입력을 허용합니다.
+        if (document.activeElement !== document.getElementById("directorChatMsg")) {
+            e.preventDefault();
+        }
+    }
 
     const key = e.key.toLowerCase();
     keys[key] = true;
@@ -1072,6 +1075,7 @@ function update(dt) {
         }
 
         activePlayers.forEach(p => {
+            // [수정] 감독 화면이든 관전자 화면이든 ownerName이 바인딩된 칸은 절대로 AI 자율 구동을 수행하지 않습니다.
             if (!p.ownerName && isReferee) {
                 p.updateAI(dt); 
                 socket.emit("syncPlayerMove", { team: p.team, id: p.id, x: p.x, y: p.y, angle: p.angle });
@@ -1331,6 +1335,7 @@ socket.on("onStartGame", (data) => {
     toggleUIVisibility();
 });
 
+// [수정] 게임 초기화 수신부 개편: 내 선택 캐릭터 탈락(null), 로그 창을 즉시 깔끔하게 폭파 비움
 socket.on("onResetMatch", () => {
     gameState = "SETUP";
     scoreBlue = 0; scoreRed = 0;
@@ -1339,7 +1344,10 @@ socket.on("onResetMatch", () => {
     document.getElementById("score1").innerText = 0;
     document.getElementById("score2").innerText = 0;
     defenseLockUntil = 0;
-    logContainer.innerHTML = "";
+    
+    myControllingPlayer = null;      // 내가 잡고 있던 제어 캐릭터 취소
+    logContainer.innerHTML = "";     // 안내문 한 줄 없이 즉각 로그 삭제 
+    
     buildActivePlayersPool();
     ball.resetBall();
     toggleUIVisibility();

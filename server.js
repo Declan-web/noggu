@@ -181,15 +181,13 @@ io.on('connection', (socket) => {
     });
 
     socket.on('syncEndMiniGame', (data) => {
-        if (roomState.gameState !== "MINIGAME") return; 
         roomState.gameState = "PLAYING";
-        
         if (data.isDefWin) {
-            addServerLog(`[디펜스 성공] 수비가 성공하여 공을 스틸했습니다!`, "defense");
+            addServerLog(`[디펜스 성공] 수비가 성공하여 수비수(${data.defTeam} ${data.defId}번)가 공을 스틸했습니다!`, "defense");
         } else {
-            addServerLog(`[디펜스 실패] 공격수가 수비를 제치고 돌파에 성공했습니다!`, "defense");
+            addServerLog(`[디펜스 실패] 공격수(${data.attTeam} ${data.attId}번)가 수비를 제치고 돌파하여 공을 지켜냈습니다!`, "defense");
         }
-        io.emit('onEndMiniGame', data.isDefWin);
+        io.emit('onEndMiniGame', data);
     });
 
     socket.on('sendDirectorChat', (msg) => {

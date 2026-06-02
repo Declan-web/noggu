@@ -3,1460 +3,292 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>다들 모여!</title>
-    <style>
-        body {
-            margin: 0;
-            background-color: #222;
-            color: #fff;
-            font-family: 'Arial', sans-serif;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 100vh;
-            overflow: hidden;
-        }
-        
-        #lobby {
-            margin-bottom: 15px;
-            display: flex;
-            gap: 12px;
-            align-items: center;
-            background: #333;
-            padding: 10px 20px;
-            border-radius: 8px;
-            border: 1px solid #555;
-            flex-wrap: wrap;
-            z-index: 20;
-        }
-        select, button, input {
-            padding: 8px 12px;
-            font-size: 14px;
-            font-weight: bold;
-            border-radius: 4px;
-            border: none;
-        }
-        input[type="password"] {
-            background-color: #444;
-            color: #fff;
-            border: 1px solid #666;
-            width: 80px;
-            text-align: center;
-        }
-        input[type="text"] {
-            background-color: #444;
-            color: #fff;
-            border: 1px solid #666;
-            width: 100px;
-        }
-        input[type="number"] {
-            background-color: #444;
-            color: #fff;
-            border: 1px solid #666;
-            width: 45px;
-            text-align: center;
-        }
-        select {
-            background-color: #444;
-            color: #fff;
-            border: 1px solid #666;
-        }
-        button {
-            background-color: #f39c12;
-            color: #fff;
-            cursor: pointer;
-        }
-        button:hover {
-            background-color: #d35400;
-        }
-        button:disabled, select:disabled, input:disabled {
-            background-color: #555;
-            color: #888;
-            cursor: not-allowed;
-        }
-
-        #mainLayout {
-            display: flex;
-            gap: 20px;
-            align-items: flex-start;
-            justify-content: center;
-            width: 100%;
-            max-width: 1780px; 
-            padding: 0 20px;
-            box-sizing: border-box;
-        }
-
-        .side-panel {
-            width: 240px;
-            height: 508px; 
-            background-color: #555555;
-            border-radius: 12px;
-            padding: 20px;
-            box-sizing: border-box;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
-            display: flex;
-            flex-direction: column;
-        }
-
-        .side-panel.log-panel {
-            width: 480px; 
-        }
-
-        .panel-title {
-            font-size: 20px;
-            font-weight: bold;
-            text-align: center;
-            margin-bottom: 25px;
-            letter-spacing: 1px;
-            border-bottom: 2px solid #666;
-            padding-bottom: 10px;
-        }
-
-        #keyGuideList {
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-            font-size: 14px;
-            line-height: 1.6;
-        }
-        .key-row {
-            display: flex;
-            justify-content: space-between;
-            border-bottom: 1px dashed rgba(255,255,255,0.1);
-            padding-bottom: 5px;
-        }
-        .key-val {
-            color: #f1c40f;
-            font-weight: bold;
-        }
-
-        #logContainer {
-            flex: 1;
-            overflow-y: auto;
-            background: #444;
-            border-radius: 6px;
-            padding: 12px;
-            font-size: 15px; 
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-            word-break: break-all;
-            white-space: pre-wrap; 
-        }
-        
-        .log-item {
-            border-bottom: 1px solid #555;
-            padding-bottom: 6px;
-            line-height: 1.5;
-        }
-        .log-time { color: #aaa; margin-right: 6px; font-size: 12px; }
-        .log-type-score { color: #2ecc71; font-weight: bold; }
-        .log-type-defense { color: #e67e22; font-weight: bold; }
-        .log-type-chat { color: #f1c40f; font-weight: bold; background: rgba(241, 196, 15, 0.1); border-radius: 2px; padding: 2px 4px; }
-
-        #chatInputZone {
-            margin-top: 10px;
-            display: none; 
-            gap: 5px;
-        }
-        #directorChatMsg {
-            flex: 1;
-            background: #333;
-            color: #fff;
-            border: 1px solid #666;
-            padding: 6px;
-            font-size: 13px;
-            border-radius: 4px;
-        }
-
-        #gameContainer {
-            position: relative;
-            box-shadow: 0 0 25px rgba(0,0,0,0.7);
-        }
-        canvas {
-            background-color: #d35400;
-            border: 4px solid #fff;
-            display: block;
-            border-radius: 4px;
-            outline: none;
-        }
-        #cutIn {
-            position: absolute;
-            top: 40%;
-            left: 50%;
-            transform: translate(-50%, -50%) scale(0);
-            font-size: 70px;
-            font-weight: 900;
-            color: #e74c3c;
-            text-shadow: -4px -4px 0 #fff, 4px -4px 0 #fff, -4px 4px 0 #fff, 4px 4px 0 #fff, 0px 8px 10px rgba(0,0,0,0.5);
-            font-style: italic;
-            pointer-events: none;
-            transition: transform 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-            z-index: 10;
-        }
-        #cutIn.active {
-            transform: translate(-50%, -50%) scale(1);
-        }
-        #miniGameUI {
-            position: absolute;
-            top: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(0,0,0,0.8);
-            padding: 15px 25px;
-            border-radius: 10px;
-            border: 2px solid #fff;
-            text-align: center;
-            display: none;
-            z-index: 5;
-        }
-        .progress-bar {
-            width: 300px;
-            height: 25px;
-            background-color: #555;
-            border-radius: 10px;
-            overflow: hidden;
-            margin-top: 10px;
-            border: 1px solid #fff;
-        }
-        #progress {
-            width: 50%;
-            height: 100%;
-            background: linear-gradient(90deg, #3498db, #e74c3c);
-        }
-        #ui {
-            margin-top: 15px;
-            font-size: 24px;
-            font-weight: bold;
-            display: flex;
-            gap: 60px;
-            justify-content: center;
-            width: 100%;
-        }
-        #adminSkillZone {
-            display: none;
-            align-items: center;
-            gap: 5px;
-            background: #444;
-            padding: 3px 8px;
-            border-radius: 4px;
-            border: 1px solid #666;
-        }
-        #pauseBtn { background-color: #34495e; color: #fff; }
-        #pauseBtn:hover { background-color: #2c3e50; }
-        #resetBtn { background-color: #c0392b; color: #fff; }
-        #resetBtn:hover { background-color: #962d22; }
-        #clearLogBtn { background-color: #7f8c8d; color: #fff; margin-left: 5px; }
-        #clearLogBtn:hover { background-color: #95a5a6; }
-        
-        .capacity-zone {
-            display: flex;
-            align-items: center;
-            gap: 4px;
-            background: #444;
-            padding: 4px 8px;
-            border-radius: 4px;
-            border: 1px solid #666;
-            font-size: 13px;
-        }
-    </style>
+    <title>다들 모여! - 통합 완결 버전</title>
     <script src="/socket.io/socket.io.js"></script>
+    <style>
+        body { margin: 0; background-color: #222; color: #fff; font-family: 'Arial', sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; overflow: hidden; }
+        #lobby { margin-bottom: 15px; display: flex; gap: 12px; align-items: center; background: #333; padding: 10px 20px; border-radius: 8px; border: 1px solid #555; z-index: 20; }
+        canvas { background-color: #d35400; border: 4px solid #fff; display: block; border-radius: 4px; outline: none; }
+        #mainLayout { display: flex; gap: 20px; align-items: flex-start; justify-content: center; width: 100%; max-width: 1780px; padding: 0 20px; }
+        .side-panel { width: 240px; height: 508px; background-color: #555; border-radius: 12px; padding: 20px; box-sizing: border-box; overflow-y: auto; }
+        #logContainer { font-size: 14px; line-height: 1.5; color: #ecf0f1; }
+        input, button { padding: 6px 10px; border-radius: 4px; border: 1px solid #777; background: #444; color: #fff; }
+        button { cursor: pointer; background: #27ae60; border: none; font-weight: bold; }
+        button:disabled { background: #7f8c8d; cursor: not-allowed; }
+        #startBtn { background: #2980b9; }
+        #pauseBtn { background: #e67e22; }
+    </style>
 </head>
 <body>
 
     <div id="lobby">
-        <div id="refereeZone" style="display: flex; gap: 8px; align-items: center;">
-            <label for="refName">감독 이름: </label>
-            <input type="text" id="refName" placeholder="감독명 입력" style="width: 90px;">
-            <label for="refKey">코드: </label>
+        <div id="refereeZone">
+            <input type="text" id="refName" placeholder="감독명">
             <input type="password" id="refKey" placeholder="코드">
-            <button onclick="authReferee()" id="authBtn">감독 임명</button>
+            <button onclick="authReferee()">감독 임명</button>
         </div>
-        
-        <div id="adminSkillZone">
-            <label id="directorTitleLabel" style="color: #f1c40f; margin-right: 5px; font-weight: bold;"></label>
-            <label>경기력 관리:</label>
-            <select id="adminTargetPlayer" onchange="loadTargetSkillLevel()"></select>
-            <input type="number" id="adminSkillInput" min="5.0" max="9.9" step="0.1" value="5.0">
-            <button onclick="updatePlayerSkill()">적용</button>
-            <button id="clearLogBtn" onclick="clearLogsFromServer()">로그 초기화</button>
-        </div>
-
-        <span style="color:#555;">|</span>
-
-        <label>팀명 세팅: </label>
-        <input type="text" id="teamNameBlueInput" value="TEAM BLUE" placeholder="블루팀명" oninput="sendLiveTeamName('BLUE')" disabled>
-        <input type="text" id="teamNameRedInput" value="TEAM RED" placeholder="레드팀명" oninput="sendLiveTeamName('RED')" disabled>
-
-        <div class="capacity-zone">
-            <span style="color: #3498db; font-weight: bold;">BLUE</span>
-            <input type="number" id="maxBlueInput" min="1" max="5" value="5" onchange="sendMatchCapacity()" disabled>
-            <span style="font-weight: bold; color: #aaa;">VS</span>
-            <input type="number" id="maxRedInput" min="1" max="5" value="5" onchange="sendMatchCapacity()" disabled>
-            <span style="color: #e74c3c; font-weight: bold;">RED</span>
-        </div>
-
-        <button id="startBtn" onclick="startGame()" disabled>[시작] GAME START</button>
-        <button id="pauseBtn" onclick="togglePause()" disabled>[정지] PAUSE</button>
-        <button id="resetBtn" onclick="triggerManualReset()" disabled>[초기화] RESET MATCH</button>
-        <span id="statusText" style="color: #f1c40f; margin-left: 5px;">[관전자 모드] 코드를 입력하세요.</span>
+        <button id="startBtn" onclick="startGame()">GAME START</button>
+        <button id="pauseBtn" onclick="togglePause()">PAUSE</button>
+        <span id="statusText" style="color: #f1c40f;">대기 중 (관전자 모드)</span>
     </div>
     
     <div id="mainLayout">
         <div class="side-panel">
-            <div class="panel-title">조작키</div>
-            <div id="keyGuideList">
-                <div class="key-row"><span>상하좌우 이동</span><span class="key-val">W, A, S, D</span></div>
-                <div class="key-row"><span>공 줍기</span><span class="key-val">E</span></div>
-                <div class="key-row"><span>패스</span><span class="key-val">Shift</span></div>
-                <div class="key-row"><span>슛</span><span class="key-val">Space</span></div>
-                <div class="key-row"><span>디펜스 시도</span><span class="key-val">좌클릭</span></div>
-                <div class="key-row"><span>디펜스 미니게임</span><span class="key-val">우클릭 연타</span></div>
-            </div>
+            <h3>조작 가이드</h3>
+            <p><b>W, A, S, D</b>: 이동</p>
+            <p><b>E</b>: 공 줍기</p>
+            <p><b>Shift</b>: 패스</p>
+            <p><b>Space</b>: 슛</p>
+            <p><b>마우스 좌클릭</b>: 수비</p>
         </div>
-
-        <div id="gameContainer">
-            <div id="cutIn">디펜스!!</div>
-            <div id="miniGameUI">
-                <div id="miniGameTitle" style="font-weight:bold; font-size:16px;">🔥 마우스 우클릭을 연타하세요! 🔥</div>
-                <div class="progress-bar">
-                    <div id="progress"></div>
-                </div>
-                <div id="miniGameVS" style="font-size:12px; margin-top:5px; color:#ccc;">수비수 VS 공격수</div>
-            </div>
-            <canvas id="gameCanvas" width="1000" height="500"></canvas>
+        <canvas id="gameCanvas" width="1000" height="500"></canvas>
+        <div class="side-panel" id="logContainer">
+            <h3>게임 로그</h3>
+            <div id="logMessages"></div>
         </div>
-
-        <div class="side-panel log-panel">
-            <div class="panel-title">LOG</div>
-            <div id="logContainer"></div>
-            <div id="chatInputZone">
-                <input type="text" id="directorChatMsg" placeholder="감독 공지 메시지 입력..." onkeydown="if(event.key==='Enter') sendDirectorChat()">
-                <button onclick="sendDirectorChat()" style="padding: 4px 10px; font-size:12px;">전송</button>
-            </div>
-        </div>
-    </div>
-    
-    <div id="ui">
-        <div style="color: #3498db;"><span id="teamLabel1">TEAM BLUE</span>: <span id="score1">0</span></div>
-        <div style="color: #e74c3c;"><span id="teamLabel2">TEAM RED</span>: <span id="score2">0</span></div>
     </div>
 
 <script>
 const socket = io();
-
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
-const cutIn = document.getElementById("cutIn");
-const miniGameUI = document.getElementById("miniGameUI");
-const progressBar = document.getElementById("progress");
-const statusText = document.getElementById("statusText");
-const pauseBtn = document.getElementById("pauseBtn");
-const resetBtn = document.getElementById("resetBtn");
-const logContainer = document.getElementById("logContainer");
-const chatInputZone = document.getElementById("chatInputZone");
+const logMessages = document.getElementById("logMessages");
 
-const maxBlueInput = document.getElementById("maxBlueInput");
-const maxRedInput = document.getElementById("maxRedInput");
-
-let isReferee = false; 
-let myDirectorName = ""; 
-
-let scoreBlue = 0;
-let scoreRed = 0;
-let teamBlueName = "TEAM BLUE";
-let teamRedName = "TEAM RED";
-
-let maxBluePlayers = 5;
-let maxRedPlayers = 5;
-
-let gameState = "SETUP"; 
-let miniGameGauge = 50;    
-let miniGameTimer = 0;
-let activeDefender = null;
-let activeAttacker = null;
-
-let defenseLockUntil = 0;
-
-let myControllingPlayer = null; 
-let keys = {}; 
-const registeredNames = new Set();
-
-let lastTime = performance.now();
-
-const court = {
-    width: canvas.width,
-    height: canvas.height,
-    leftGoal: { x: 50, y: 250, radius: 20 },
-    rightGoal: { x: 950, y: 250, radius: 20 }
-};
-
-const onlineScheme = { 
-    up: 'w', 
-    down: 's', 
-    left: 'a', 
-    right: 'd', 
-    grab: 'e', 
-    pass: 'shift', 
-    shoot: ' ' 
-};
-
-class Player {
-    constructor(x, y, team, id, spawnIndex) {
-        this.x = x;
-        this.y = y;
-        this.team = team; 
-        this.id = id;
-        this.spawnIndex = spawnIndex;
-        this.radius = 16;
-        
-        this.baseSpeed = 210; 
-        this.color = team === "BLUE" ? "#3498db" : "#e74c3c";
-        
-        this.ownerName = null;     
-        this.socketId = null; 
-        this.angle = team === "BLUE" ? 0 : Math.PI; 
-
-        this.lastDefenseTime = 0; 
-        this.defenseCooldown = 3000; 
-        this.skillLevel = 5.0;
-    }
-
-    draw() {
-        if (gameState === "SETUP") {
-            if (this.team === "BLUE" && this.id > maxBluePlayers) return;
-            if (this.team === "RED" && this.id > maxRedPlayers) return;
-        }
-
-        const now = Date.now();
-        const timePassed = now - this.lastDefenseTime;
-        const isCooling = timePassed < this.defenseCooldown;
-
-        const isMe = (myControllingPlayer && myControllingPlayer.team === this.team && myControllingPlayer.id === this.id);
-
-        ctx.save();
-        if (this.ownerName) {
-            ctx.strokeStyle = isCooling ? "rgba(180, 180, 180, 0.4)" : "rgba(255, 242, 0, 0.75)";
-            ctx.lineWidth = 2.5;
-            ctx.setLineDash([4, 4]);
-            ctx.beginPath();
-            ctx.moveTo(this.x, this.y);
-            ctx.lineTo(this.x + Math.cos(this.angle) * 45, this.y + Math.sin(this.angle) * 45);
-            ctx.stroke();
-        }
-        ctx.restore();
-
-        ctx.beginPath();
-        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-
-        if (isMe) {
-            ctx.fillStyle = this.color; 
-        } else {
-            ctx.fillStyle = this.team === "BLUE" ? "#1e547b" : "#8a2b21";
-        }
-        ctx.fill();
-
-        if (isMe) {
-            ctx.lineWidth = 4.5;
-            ctx.strokeStyle = "#f1c40f"; 
-        } else {
-            ctx.lineWidth = 2.0;
-            ctx.strokeStyle = this.ownerName ? "#444444" : "#cccccc"; 
-        }
-        ctx.stroke();
-        ctx.closePath();
-
-        ctx.fillStyle = "#fff";
-        ctx.font = "bold 10px sans-serif";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText(this.id, this.x, this.y);
-
-        if (this.ownerName) {
-            ctx.fillStyle = isMe ? "#fff" : "#bbbbbb";
-            ctx.font = isMe ? "bold 12px sans-serif" : "bold 11px sans-serif";
-            ctx.fillText(`${this.ownerName} [${this.skillLevel.toFixed(1)}v]`, this.x, this.y - this.radius - 8);
-
-            if (isCooling && gameState !== "PAUSE") {
-                const remaining = Math.ceil((this.defenseCooldown - timePassed) / 1000);
-                ctx.fillStyle = "#ff4d4d";
-                ctx.font = "9px sans-serif";
-                ctx.fillText(`${remaining}s`, this.x, this.y + this.radius + 12);
-            }
-        }
-    }
-
-    move(dx, dy, dt) {
-        this.x += dx * this.baseSpeed * dt;
-        this.y += dy * this.baseSpeed * dt;
-        this.x = Math.max(this.radius, Math.min(court.width - this.radius, this.x));
-        this.y = Math.max(this.radius, Math.min(court.height - this.radius, this.y));
-
-        if (dx !== 0 || dy !== 0) {
-            this.angle = Math.atan2(dy, dx);
-        }
-    }
-}
-
-const ball = {
-    x: 500,
-    y: 250,
-    radius: 9,
-    vx: 0,
-    vy: 0,
-    holder: null,
-    isFlying: false,
-    ignoreWalls: false, 
-    isChecking: false, 
-    lastShooterSkill: 5.0,
-
-    draw() {
-        ctx.beginPath();
-        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-        ctx.fillStyle = "#e67e22";
-        ctx.fill();
-        ctx.lineWidth = 1;
-        ctx.strokeStyle = "#000";
-        ctx.stroke();
-        ctx.closePath();
-    },
-
-    update(dt) {
-        if (gameState !== "PLAYING") return;
-
-        if (this.holder) {
-            const dribbleY = Math.sin(Date.now() * 0.012) * 6;
-            this.x = this.holder.x + Math.cos(this.holder.angle) * 14;
-            this.y = this.holder.y + Math.sin(this.holder.angle) * 14 + dribbleY;
-            this.ignoreWalls = false;
-            this.isChecking = false;
-        } else if (this.isFlying) {
-            this.x += this.vx * dt * 60;
-            this.y += this.vy * dt * 60;
-            this.vx *= Math.pow(0.98, dt * 60);
-            this.vy *= Math.pow(0.98, dt * 60);
-
-            const distToRight = Math.hypot(this.x - court.rightGoal.x, this.y - court.rightGoal.y);
-            const distToLeft = Math.hypot(this.x - court.leftGoal.x, this.y - court.leftGoal.y);
-
-            if (distToRight < court.rightGoal.radius + 25 || distToLeft < court.leftGoal.radius + 25) {
-                this.ignoreWalls = true; 
-            } else {
-                this.ignoreWalls = false;
-                this.isChecking = false; 
-            }
-
-            if (!this.isChecking) {
-                if (distToRight < court.rightGoal.radius + 25) {
-                    this.isChecking = true;
-                    this.checkGoalProbability("BLUE"); 
-                }
-                else if (distToLeft < court.leftGoal.radius + 25) {
-                    this.isChecking = true;
-                    this.checkGoalProbability("RED"); 
-                }
-            }
-
-            if (Math.abs(this.vx) < 0.3 && Math.abs(this.vy) < 0.3) {
-                this.isFlying = false;
-                this.ignoreWalls = false;
-                this.isChecking = false;
-            }
-        }
-
-        if (!this.ignoreWalls) {
-            if (this.x < this.radius || this.x > court.width - this.radius) this.vx *= -1;
-            if (this.y < this.radius || this.y > court.height - this.radius) this.vy *= -1;
-        }
-        this.x = Math.max(this.radius, Math.min(court.width - this.radius, this.x));
-        this.y = Math.max(this.radius, Math.min(court.height - this.radius, this.y));
-    },
-
-    checkGoalProbability(scoringTeam) {
-        const shooterLv = this.lastShooterSkill || 5.0;
-        let successChance = 0.50; 
-
-        if (shooterLv >= 6.0 && shooterLv < 7.0) successChance = 0.60;
-        else if (shooterLv >= 7.0 && shooterLv < 8.0) successChance = 0.70;
-        else if (shooterLv >= 8.0 && shooterLv < 9.0) successChance = 0.80;
-        else if (shooterLv >= 9.0) successChance = 0.90;
-        
-        if (Math.random() < successChance) {
-            this.isFlying = false;
-            this.ignoreWalls = false;
-            this.isChecking = false;
-
-            if (scoringTeam === "BLUE") { scoreBlue += 2; }
-            else { scoreRed += 2; }
-            
-            document.getElementById("score1").innerText = scoreBlue;
-            document.getElementById("score2").innerText = scoreRed;
-            
-            if (isReferee) {
-                socket.emit("syncScore", { blue: scoreBlue, red: scoreRed, scoringTeam: scoringTeam });
-            }
-            this.resetBall();
-        } else {
-            const randomAngle = Math.random() * Math.PI * 2; 
-            const bouncePower = 11 + Math.random() * 4; 
-            
-            this.vx = Math.cos(randomAngle) * bouncePower;
-            this.vy = Math.sin(randomAngle) * bouncePower;
-            
-            this.x += this.vx * 1.5;
-            this.ignoreWalls = false;
-
-            if (isReferee) {
-                socket.emit("syncBallAction", { 
-                    x: this.x, 
-                    y: this.y, 
-                    vx: this.vx, 
-                    vy: this.vy, 
-                    holderId: null, 
-                    isFlying: true, 
-                    lastShooterSkill: shooterLv 
-                });
-            }
-        }
-    },
-
-    resetBall() {
-        this.x = 500;
-        this.y = 250;
-        this.vx = 0;
-        this.vy = 0;
-        this.holder = null;
-        this.isFlying = false;
-        this.ignoreWalls = false;
-        this.isChecking = false;
-        this.lastShooterSkill = 5.0;
-        if (isReferee) {
-            socket.emit("syncBallAction", { x: 500, y: 250, vx: 0, vy: 0, holderId: null, isFlying: false });
-        }
-    }
-};
-
-const allSpawnPositions = {
-    BLUE: [ {x:200, y:250}, {x:320, y:130}, {x:320, y:370}, {x:120, y:160}, {x:120, y:340} ],
-    RED:  [ {x:800, y:250}, {x:680, y:130}, {x:680, y:370}, {x:880, y:160}, {x:880, y:340} ]
-};
-
+// 전역 게임 상태 변수
+let myControllingPlayer = null;
+let keys = {};
+let ball = { x: 500, y: 250, holder: null, isFlying: false };
 let activePlayers = [];
+let gameState = "SETUP";
 
-function buildActivePlayersPool(preserveNames = true) {
-    const backupMap = {};
-    activePlayers.forEach(p => {
-        if (p.ownerName) {
-            backupMap[`${p.team}_${p.id}`] = {
-                ownerName: p.ownerName,
-                socketId: p.socketId,
-                skillLevel: p.skillLevel
-            };
-        }
-    });
-
-    if (!preserveNames) {
-        registeredNames.clear();
-    }
-
-    activePlayers = [];
-
-    for(let i = 0; i < maxBluePlayers; i++) {
-        let bPos = allSpawnPositions.BLUE[i];
-        let p = new Player(bPos.x, bPos.y, "BLUE", i+1, i);
-        let bk = backupMap[`BLUE_${i+1}`];
-        if (bk) {
-            p.ownerName = bk.ownerName;
-            p.socketId = bk.socketId;
-            p.skillLevel = bk.skillLevel;
-            if (!preserveNames) registeredNames.add(bk.ownerName);
-        }
-        activePlayers.push(p);
-    }
-    for(let i = 0; i < maxRedPlayers; i++) {
-        let rPos = allSpawnPositions.RED[i];
-        let p = new Player(rPos.x, rPos.y, "RED", i+1, i);
-        let bk = backupMap[`RED_${i+1}`];
-        if (bk) {
-            p.ownerName = bk.ownerName;
-            p.socketId = bk.socketId;
-            p.skillLevel = bk.skillLevel;
-            if (!preserveNames) registeredNames.add(bk.ownerName);
-        }
-        activePlayers.push(p);
-    }
-
-    if (myControllingPlayer) {
-        const found = activePlayers.find(p => p.team === myControllingPlayer.team && p.id === myControllingPlayer.id);
-        if (found && found.socketId === socket.id) {
-            myControllingPlayer = found;
-        }
-    }
-    updateAdminDropdown();
+// 로그 기록 함수
+function addLog(message) {
+    const p = document.createElement("p");
+    p.textContent = message;
+    p.style.margin = "4px 0";
+    logMessages.appendChild(p);
+    document.getElementById("logContainer").scrollTop = document.getElementById("logContainer").scrollHeight;
 }
 
-function sendMatchCapacity() {
-    if (!isReferee) return;
-    let bMax = parseInt(maxBlueInput.value) || 5;
-    let rMax = parseInt(maxRedInput.value) || 5;
-
-    if (bMax < 1) bMax = 1; if (bMax > 5) bMax = 5;
-    if (rMax < 1) rMax = 1; if (rMax > 5) rMax = 5;
-
-    maxBlueInput.value = bMax;
-    maxRedInput.value = rMax;
-
-    maxBluePlayers = bMax;
-    maxRedPlayers = rMax;
-
-    buildActivePlayersPool(true);
-    socket.emit("syncMatchCapacity", { blueMax: bMax, redMax: rMax });
-}
-
-function updateAdminDropdown() {
-    const select = document.getElementById("adminTargetPlayer");
-    if (!select) return;
-    select.innerHTML = "";
-    activePlayers.forEach(p => {
-        if(p.ownerName) {
-            const opt = document.createElement("option");
-            opt.value = `${p.team}_${p.id}`;
-            opt.innerText = `[${p.team}] ${p.ownerName} (${p.id}번)`;
-            select.appendChild(opt);
-        }
-    });
-    loadTargetSkillLevel();
-}
-
-function loadTargetSkillLevel() {
-    const select = document.getElementById("adminTargetPlayer");
-    if (!select || !select.value) return;
-    const [team, id] = select.value.split("_");
-    const target = activePlayers.find(p => p.team === team && p.id === parseInt(id));
-    if (target) {
-        document.getElementById("adminSkillInput").value = target.skillLevel.toFixed(1);
-    }
-}
-
-function updatePlayerSkill() {
-    if (!isReferee) return;
-    const select = document.getElementById("adminTargetPlayer");
-    if (!select || !select.value) return;
-    const [team, id] = select.value.split("_");
-    let val = parseFloat(document.getElementById("adminSkillInput").value);
-    
-    if (isNaN(val) || val < 5.0) val = 5.0;
-    if (val > 9.9) val = 9.9;
-    
-    socket.emit("syncUpdateSkillLevel", { team, id: parseInt(id), skillLevel: val });
-}
-
-function authReferee() {
-    const inputName = document.getElementById("refName").value.trim();
-    const inputKey = document.getElementById("refKey").value;
-    
-    if (!inputName) {
-        alert("감독 이름을 입력해 주세요!");
-        return;
-    }
-
-    if (inputKey === "KEY") {
-        socket.emit("syncRegisterDirector", inputName);
-    } else {
-        alert("잘못된 심판 코드입니다!");
-    }
-}
-
-function clearLogsFromServer() {
-    if (!isReferee) return;
-    socket.emit("syncClearLogs");
-}
-
-function sendLiveTeamName(team) {
-    if (!isReferee) return;
-    let inputVal = "";
-    if (team === "BLUE") {
-        inputVal = document.getElementById("teamNameBlueInput").value.trim() || "TEAM BLUE";
-        teamBlueName = inputVal;
-        document.getElementById("teamLabel1").innerText = inputVal;
-    } else {
-        inputVal = document.getElementById("teamNameRedInput").value.trim() || "TEAM RED";
-        teamRedName = inputVal;
-        document.getElementById("teamLabel2").innerText = inputVal;
-    }
-    socket.emit("syncLiveTeamName", { team: team, name: inputVal });
-}
-
-function startGame() {
-    if (!isReferee) return;
-    document.getElementById("startBtn").blur();
-
-    if (gameState === "SETUP") {
-        teamBlueName = document.getElementById("teamNameBlueInput").value.trim() || "TEAM BLUE";
-        teamRedName = document.getElementById("teamNameRedInput").value.trim() || "TEAM RED";
-        socket.emit("syncStartGame", { 
-            teamBlueName, 
-            teamRedName,
-            maxBluePlayers,
-            maxRedPlayers
+// [핵심] 공 줍기 판정 (범위 50px로 넉넉하게 확장)
+function checkManualBallGrab(player) {
+    if (ball.holder || ball.isFlying) return;
+    const dist = Math.hypot(ball.x - player.x, ball.y - player.y);
+    if (dist < 50) { 
+        ball.holder = player;
+        socket.emit("syncBallAction", { 
+            x: ball.x, 
+            y: ball.y, 
+            vx: 0, 
+            vy: 0, 
+            holderId: { team: player.team, id: player.id }, 
+            isFlying: false 
         });
+        addLog(`[시스템] 공 획득: ${player.team}팀 ${player.id}번`);
     }
 }
 
-function triggerManualReset() {
-    if (!isReferee) return;
-    resetBtn.blur();
-    if(confirm("정말로 전체 경기를 처음 상태로 완전히 초기화하시겠습니까? (캐릭터 선택 및 모든 로그 소멸)")) {
-        socket.emit("syncResetMatch");
+// 슛 액션
+function shootAction(player) {
+    if (!ball.holder || ball.holder.id !== player.id || ball.holder.team !== player.team) return;
+    ball.holder = null;
+    ball.isFlying = true;
+    socket.emit("syncBallAction", {
+        x: ball.x,
+        y: ball.y,
+        vx: player.team === "BLUE" ? 15 : -15,
+        vy: 0,
+        holderId: null,
+        isFlying: true
+    });
+    addLog(`[시스템] 슛 시도: ${player.team}팀 ${player.id}번`);
+}
+
+// 패스 액션
+function passAction(player) {
+    if (!ball.holder || ball.holder.id !== player.id || ball.holder.team !== player.team) return;
+    ball.holder = null;
+    ball.isFlying = true;
+    socket.emit("syncBallAction", {
+        x: ball.x,
+        y: ball.y,
+        vx: player.team === "BLUE" ? 10 : -10,
+        vy: 0,
+        holderId: null,
+        isFlying: true
+    });
+    addLog(`[시스템] 패스 시도: ${player.team}팀 ${player.id}번`);
+}
+
+// 수비 판정 트리거
+function checkDefenseTrigger(player) {
+    socket.emit("defenseTrigger", { team: player.team, id: player.id });
+}
+
+// 감독 권한 인증
+function authReferee() {
+    const name = document.getElementById("refName").value;
+    const key = document.getElementById("refKey").value;
+    if (name && key) {
+        socket.emit("authReferee", { name, key });
     }
+}
+
+// 게임 시작 및 일시정지 요청
+function startGame() {
+    socket.emit("requestStartGame");
 }
 
 function togglePause() {
-    if (!isReferee) return;
-    if (gameState === "SETUP") return; 
-    pauseBtn.blur();
-    socket.emit("syncTogglePause");
+    socket.emit("requestTogglePause");
 }
 
-function shootAction(player) {
-    if (gameState === "PAUSE") return;
-    ball.holder = null;
-    ball.isFlying = true;
-    ball.ignoreWalls = false;
-    ball.isChecking = false;
-    
-    const power = 14;
-    ball.vx = Math.cos(player.angle) * power;
-    ball.vy = Math.sin(player.angle) * power;
-    ball.lastShooterSkill = player.skillLevel || 5.0;
-
-    socket.emit("syncBallAction", { 
-        x: ball.x, y: ball.y, vx: ball.vx, vy: ball.vy, holderId: null, isFlying: true, lastShooterSkill: player.skillLevel || 5.0
-    });
-}
-
-function passAction(player) {
-    if (gameState === "PAUSE") return;
-    ball.holder = null;
-    ball.isFlying = true;
-    ball.ignoreWalls = false;
-    ball.isChecking = false;
-    const power = 11;
-    ball.vx = Math.cos(player.angle) * power;
-    ball.vy = Math.sin(player.angle) * power;
-    socket.emit("syncBallAction", { x: ball.x, y: ball.y, vx: ball.vx, vy: ball.vy, holderId: null, isFlying: true });
-}
-
-function sendDirectorChat() {
-    const input = document.getElementById("directorChatMsg");
-    const text = input.value; 
-    if(!text.trim()) return;
-    socket.emit('sendDirectorChat', text);
-    input.value = "";
-}
-
-function appendLogToUI(log) {
-    const logItem = document.createElement("div");
-    logItem.className = `log-item log-type-${log.type}`;
-    
-    const timeSpan = document.createElement("span");
-    timeSpan.className = "log-time";
-    timeSpan.innerText = `[${log.timestamp}]`;
-    
-    const msgSpan = document.createElement("span");
-    msgSpan.innerText = log.message; 
-    
-    logItem.appendChild(timeSpan);
-    logItem.appendChild(msgSpan);
-    
-    logContainer.appendChild(logItem);
-    logContainer.scrollTop = logContainer.scrollHeight;
-}
-
-// 브라우저 기본 컨텍스트 메뉴(우클릭 팝업) 방지
-window.addEventListener("contextmenu", e => {
-    const rect = canvas.getBoundingClientRect();
-    if (e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom) {
-        e.preventDefault();
-    }
-});
-
-// [★ 핵심 전면 교체] 마우스 클릭 감지를 전역(window)단에서 가로채 포커스 씹힘 버그 100% 완전 차단
-window.addEventListener("mousedown", e => {
-    // 1. 디펜스 미니게임 진행 중 마우스 우클릭(e.button === 2) 처리
-    if (gameState === "MINIGAME" && e.button === 2) {
-        e.preventDefault();
-        if (myControllingPlayer) {
-            const p = myControllingPlayer;
-            if (activeDefender && p.team === activeDefender.team && p.id === activeDefender.id) {
-                miniGameGauge -= 4;
-                if (miniGameGauge < 0) miniGameGauge = 0;
-                socket.emit("syncMiniGameHit", miniGameGauge);
-            }
-            else if (activeAttacker && p.team === activeAttacker.team && p.id === activeAttacker.id) {
-                miniGameGauge += 4;
-                if (miniGameGauge > 100) miniGameGauge = 100;
-                socket.emit("syncMiniGameHit", miniGameGauge);
-            }
-        }
-        return;
-    }
-
-    // 2. 마우스 좌클릭(e.button === 0) 처리 (정확한 Canvas 내부 좌표 산출 계산)
-    if (e.button === 0) {
-        const rect = canvas.getBoundingClientRect();
-        // 클릭 위치가 Canvas 영역 내부인지 먼저 무조건 검증
-        if (e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom) {
-            const mouseX = e.clientX - rect.left;
-            const mouseY = e.clientY - rect.top;
-
-            if (gameState === "SETUP") {
-                if (myControllingPlayer) {
-                    alert("이미 선택한 캐릭터가 존재합니다.");
-                    return;
-                }
-
-                activePlayers.forEach(p => {
-                    const dist = Math.hypot(p.x - mouseX, p.y - mouseY);
-                    if (dist < p.radius + 10) {
-                        if (!p.ownerName) {
-                            const name = prompt(`[${p.team === "BLUE" ? "블루" : "레드"} ${p.id}번] 유저 이름 입력:`);
-                            if (name && name.trim() !== "") {
-                                const trimmedName = name.trim();
-                                if (registeredNames.has(trimmedName)) {
-                                    alert("이미 등록된 유저명입니다.");
-                                    return;
-                                }
-                                p.ownerName = trimmedName;
-                                p.socketId = socket.id; 
-                                myControllingPlayer = p; 
-                                registeredNames.add(trimmedName);
-                                socket.emit("syncRegisterOwner", { team: p.team, id: p.id, ownerName: trimmedName });
-                                updateAdminDropdown();
-                            }
-                        } else {
-                            alert(`이미 선택 완료된 캐릭터입니다.`);
-                        }
-                    }
-                });
-            }
-            else if (gameState === "PLAYING" && myControllingPlayer) {
-                checkDefenseTrigger(myControllingPlayer);
-            }
-        }
-    }
-});
-
-// [★ 핵심 전면 교체] 키보드 입력 수신 대상을 전역(window)으로 완전히 잡아두어 입력 끊김 현상 해결
+// 키보드 리스너 등록 (입력 유실 방지하기 위해 window 객체에 바인딩)
 window.addEventListener("keydown", e => {
-    // 채팅창을 입력 중일 때는 인게임 조작 키 작동을 완전히 분기 처리하여 씹힘 방지
-    if (document.activeElement === document.getElementById("directorChatMsg")) {
-        return;
-    }
-
+    if (document.activeElement && document.activeElement.tagName === 'INPUT') return;
+    
     const key = e.key.toLowerCase();
     keys[key] = true;
     
-    // E, Shift, Space, ArrowKey 등의 기본 브라우저 스크롤 현상 완벽 방지
-    if (e.key === " " || e.key === "Enter" || e.key.toLowerCase() === "shift") {
-        e.preventDefault();
+    // 즉시 반응해야 하는 일회성 이벤트 처리
+    if (myControllingPlayer) {
+        if (key === 'e') checkManualBallGrab(myControllingPlayer);
+        if (key === ' ') shootAction(myControllingPlayer);
+        if (key === 'shift') passAction(myControllingPlayer);
     }
-
-    if (gameState === "PAUSE") return; 
-
-    if (gameState === "PLAYING" && myControllingPlayer) {
-        const p = myControllingPlayer;
-        if (key === onlineScheme.grab) { // E 키
-            checkManualBallGrab(p);
-        }
-        if (ball.holder && ball.holder.team === p.team && ball.holder.id === p.id) {
-            if (key === onlineScheme.shoot) shootAction(p); // Space 키
-            if (key === onlineScheme.pass) passAction(p);   // Shift 키
-        }
-    }
+    
+    if ([" ", "shift", "w", "a", "s", "d"].includes(key)) e.preventDefault();
 });
 
 window.addEventListener("keyup", e => { 
-    if (document.activeElement === document.getElementById("directorChatMsg")) return;
     keys[e.key.toLowerCase()] = false; 
 });
 
-function checkManualBallGrab(player) {
-    if (ball.holder || ball.isFlying) return;
+// 마우스 다운 이벤트 (포커스 잃음 방지 및 수비동작 연동)
+window.addEventListener("mousedown", e => {
+    canvas.focus();
+    if (e.button === 0 && gameState === "PLAYING" && myControllingPlayer) {
+        checkDefenseTrigger(myControllingPlayer);
+    }
+});
+
+// [핵심] 캐릭터 이동 및 실시간 서버 좌표 전송 로직
+function update() {
+    if (gameState !== "PLAYING" || !myControllingPlayer) return;
     
-    const dist = Math.hypot(ball.x - player.x, ball.y - player.y);
-    if (dist < player.radius + ball.radius + 15) { 
-        ball.holder = player;
-        ball.ignoreWalls = false;
-        ball.isChecking = false;
-        socket.emit("syncBallAction", { x: ball.x, y: ball.y, vx: 0, vy: 0, holderId: { team: player.team, id: player.id }, isFlying: false });
-    }
-}
+    let moved = false;
+    const moveSpeed = 4;
 
-function checkDefenseTrigger(defender) {
-    const now = Date.now();
-    if (now < defenseLockUntil) return;
-    if (now - defender.lastDefenseTime < defender.defenseCooldown) return; 
+    if (keys['w']) { myControllingPlayer.y -= moveSpeed; moved = true; }
+    if (keys['s']) { myControllingPlayer.y += moveSpeed; moved = true; }
+    if (keys['a']) { myControllingPlayer.x -= moveSpeed; moved = true; }
+    if (keys['d']) { myControllingPlayer.x += moveSpeed; moved = true; }
 
-    if (ball.holder && ball.holder.team !== defender.team) {
-        const dist = Math.hypot(defender.x - ball.holder.x, defender.y - ball.holder.y);
-        if (dist < defender.radius + ball.holder.radius + 40) {
-            defender.lastDefenseTime = now; 
-            socket.emit("syncStartDefense", { defTeam: defender.team, defId: defender.id, attTeam: ball.holder.team, attId: ball.holder.id });
-        }
-    }
-}
+    // 맵 경계 제한 (캔버스 밖으로 이탈 방지)
+    if (myControllingPlayer.x < 15) myControllingPlayer.x = 15;
+    if (myControllingPlayer.x > canvas.width - 15) myControllingPlayer.x = canvas.width - 15;
+    if (myControllingPlayer.y < 15) myControllingPlayer.y = 15;
+    if (myControllingPlayer.y > canvas.height - 15) myControllingPlayer.y = canvas.height - 15;
 
-function startDefenseMiniGame(defender, attacker) {
-    gameState = "MINIGAME";
-    activeDefender = defender;
-    activeAttacker = attacker;
-    miniGameGauge = 50; 
-    miniGameTimer = 180; 
-
-    const defName = defender.ownerName || `${defender.team === "BLUE" ? teamBlueName : teamRedName} ${defender.id}`;
-    const attName = attacker.ownerName || `${attacker.team === "BLUE" ? teamBlueName : teamRedName} ${attacker.id}`;
-    document.getElementById("miniGameVS").innerText = `[수비수] ${defName} VS [공격수] ${attName}`;
-
-    cutIn.classList.add("active");
-    setTimeout(() => {
-        if (gameState === "PAUSE") return; 
-        cutIn.classList.remove("active");
-        miniGameUI.style.display = "block";
-    }, 600);
-}
-
-function updateMiniGame() {
-    if (gameState !== "MINIGAME") return;
-    
-    miniGameTimer--;
-    if (isReferee) {
-        socket.emit("syncMiniGameTick", { gauge: miniGameGauge, timer: miniGameTimer });
-    }
-
-    // [디펜스 반영] 수비수 게이지 0 달성 시 수비 승리 처리 고정
-    if (miniGameGauge <= 5) {
-        socket.emit("syncEndMiniGame", { 
-            isDefWin: true, 
-            defTeam: activeDefender.team, 
-            defId: activeDefender.id,
-            attTeam: activeAttacker.team,
-            attId: activeAttacker.id
+    // 조작 중인 캐릭터의 위치가 변했다면 서버로 무조건 즉시 브로드캐스팅 발송
+    if (moved) {
+        socket.emit("syncPlayerMovement", {
+            id: myControllingPlayer.id,
+            team: myControllingPlayer.team,
+            x: myControllingPlayer.x,
+            y: myControllingPlayer.y
         });
-    } 
-    // [디펜스 반영] 공격수 게이지 100 달성 혹은 시간초과 시 수비 실패(공격 승리) 고정
-    else if (miniGameGauge >= 95 || miniGameTimer <= 0) {
-        socket.emit("syncEndMiniGame", { 
-            isDefWin: false, 
-            defTeam: activeDefender.team, 
-            defId: activeDefender.id,
-            attTeam: activeAttacker.team,
-            attId: activeAttacker.id
-        });
-    } 
-}
-
-// [디펜스 결과 완벽 반영] 승패 판정 후 이긴 유저에게 물리 소유권(ball.holder)을 무조건 동기화 부여
-function endMiniGame(resultData) {
-    gameState = "PLAYING";
-    miniGameUI.style.display = "none";
-    ball.ignoreWalls = false;
-    ball.isChecking = false;
-
-    const currentDef = activePlayers.find(p => p.team === resultData.defTeam && p.id === resultData.defId);
-    const currentAtt = activePlayers.find(p => p.team === resultData.attTeam && p.id === resultData.attId);
-
-    if (resultData.isDefWin) {
-        // 수비수 승리 -> 이긴 사람(수비수)에게 무조건 공을 쥐어줌!
-        if (currentDef) {
-            ball.holder = currentDef;
-        }
-    } else {
-        // 공격수 승리 -> 수비수를 뒤로 날리고 공격수가 공 소유권을 완벽 지켜냄!
-        if (currentAtt) {
-            ball.holder = currentAtt;
-        }
-        if (currentDef && currentAtt) {
-            const angle = Math.atan2(currentDef.y - currentAtt.y, currentDef.x - currentAtt.x);
-            currentDef.x += Math.cos(angle) * 55;
-            currentDef.y += Math.sin(angle) * 55;
-        }
     }
-    
-    defenseLockUntil = Date.now() + 2000;
-    activeDefender = null;
-    activeAttacker = null;
-    keys = {}; // 미니게임 도중 꼬였거나 잔존하던 키 전면 초기화
-}
 
-function update(dt) {
-    if (gameState === "PAUSE") return;
-
-    if (gameState === "PLAYING") {
-        if (myControllingPlayer) {
-            const p = myControllingPlayer;
-            let dx = 0, dy = 0;
-            
-            if (keys[onlineScheme.up]) dy = -1;
-            if (keys[onlineScheme.down]) dy = 1;
-            if (keys[onlineScheme.left]) dx = -1;
-            if (keys[onlineScheme.right]) dx = 1;
-            
-            if (dx !== 0 || dy !== 0) {
-                p.move(dx, dy, dt); 
-                socket.emit("syncPlayerMove", { team: p.team, id: p.id, x: p.x, y: p.y, angle: p.angle });
-            }
-        }
-
-        if (isReferee) {
-            socket.emit("syncBallLocation", { x: ball.x, y: ball.y, vx: ball.vx, vy: ball.vy, isFlying: ball.isFlying });
-        }
-    } else if (gameState === "MINIGAME") {
-        updateMiniGame();
+    // 공을 들고 있는 경우 공의 포지션을 캐릭터와 일치시킴
+    if (ball.holder && ball.holder.id === myControllingPlayer.id && ball.holder.team === myControllingPlayer.team) {
+        ball.x = myControllingPlayer.x;
+        ball.y = myControllingPlayer.y;
     }
 }
 
+// 화면 렌더링 로직
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // 중앙선 및 골대 그리기
+    ctx.strokeStyle = "rgba(255,255,255,0.6)";
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(canvas.width / 2, 0);
+    ctx.lineTo(canvas.width / 2, canvas.height);
+    ctx.stroke();
 
-    ctx.strokeStyle = "rgba(255,255,255,0.4)";
-    ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.moveTo(500, 0); ctx.lineTo(500, 500); ctx.stroke();
-    ctx.beginPath(); ctx.arc(500, 250, 70, 0, Math.PI * 2); ctx.stroke();
-    ctx.strokeRect(0, 150, 80, 200);
-    ctx.strokeRect(920, 150, 80, 200);
-
+    // 모든 플레이어 순회하며 그리기
+    activePlayers.forEach(p => {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 15, 0, Math.PI * 2);
+        ctx.fillStyle = p.team === "BLUE" ? "#3498db" : "#e74c3c";
+        ctx.fill();
+        ctx.strokeStyle = "#fff";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        
+        // 조작 중인 플레이어에게 하이라이트 표시
+        if (myControllingPlayer && myControllingPlayer.id === p.id && myControllingPlayer.team === p.team) {
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, 22, 0, Math.PI * 2);
+            ctx.strokeStyle = "#f1c40f";
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
+    });
+    
+    // 공 그리기
+    ctx.beginPath();
+    ctx.arc(ball.x, ball.y, 10, 0, Math.PI * 2);
+    ctx.fillStyle = "#f39c12";
+    ctx.fill();
     ctx.strokeStyle = "#fff";
-    ctx.beginPath(); ctx.arc(court.leftGoal.x, court.leftGoal.y, court.leftGoal.radius, 0, Math.PI * 2); ctx.stroke();
-    ctx.beginPath(); ctx.arc(court.rightGoal.x, court.rightGoal.y, court.rightGoal.radius, 0, Math.PI * 2); ctx.stroke();
-
-    activePlayers.forEach(p => p.draw());
-    ball.draw();
-
-    if (gameState === "PAUSE") {
-        ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = "#fff";
-        ctx.font = "bold 40px sans-serif";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText("[정지] MATCH PAUSED", canvas.width / 2, canvas.height / 2);
-    }
+    ctx.lineWidth = 2;
+    ctx.stroke();
 }
 
+// 메인 게임 루프 정의
 function gameLoop() {
-    const now = performance.now();
-    let dt = (now - lastTime) / 1000;
-    if (dt > 0.1) dt = 0.1; 
-    lastTime = now;
-
-    update(dt);
+    update();
     draw();
     requestAnimationFrame(gameLoop);
 }
 
-socket.on("onInitRoomState", (serverRoom) => {
-    gameState = serverRoom.gameState;
+// [서버 소켓 이벤트 리스너]
+socket.on("initControlPlayer", (data) => {
+    myControllingPlayer = data;
+    document.getElementById("statusText").textContent = `${data.team}팀 ${data.id}번 선수로 참여 중`;
+    document.getElementById("statusText").style.color = data.team === "BLUE" ? "#3498db" : "#e74c3c";
+    addLog(`[시스템] 게임에 참여했습니다: ${data.team}팀 ${data.id}번`);
+});
+
+socket.on("syncGameState", (data) => {
+    gameState = data.state;
+    activePlayers = data.players;
     
-    maxBluePlayers = serverRoom.maxBluePlayers || 5;
-    maxRedPlayers = serverRoom.maxRedPlayers || 5;
-    
-    maxBlueInput.value = maxBluePlayers;
-    maxRedInput.value = maxRedPlayers;
-
-    buildActivePlayersPool(false);
-
-    serverRoom.registeredOwners.forEach(data => {
-        const target = activePlayers.find(p => p.team === data.team && p.id === data.id);
-        if (target) {
-            target.ownerName = data.ownerName;
-            target.socketId = data.socketId;
-            target.skillLevel = data.skillLevel || 5.0;
-            registeredNames.add(data.ownerName);
-            if(data.socketId === socket.id) {
-                myControllingPlayer = target;
-            }
-        }
-    });
-
-    if(serverRoom.directorName) {
-        document.getElementById("refereeZone").style.display = "none";
-        const label = document.getElementById("directorTitleLabel");
-        label.innerText = `[감독] ${serverRoom.directorName}`;
-        if(socket.id === serverRoom.directorSocketId) {
-            isReferee = true;
-            myDirectorName = serverRoom.directorName;
-            document.getElementById("adminSkillZone").style.display = "flex";
-            chatInputZone.style.display = "flex";
-        }
-    }
-
-    updateAdminDropdown();
-
-    teamBlueName = serverRoom.teamBlueName;
-    teamRedName = serverRoom.teamRedName;
-    document.getElementById("teamLabel1").innerText = teamBlueName;
-    document.getElementById("teamLabel2").innerText = teamRedName;
-    document.getElementById("teamNameBlueInput").value = teamBlueName;
-    document.getElementById("teamNameRedInput").value = teamRedName;
-
-    scoreBlue = serverRoom.scoreBlue;
-    scoreRed = serverRoom.scoreRed;
-    document.getElementById("score1").innerText = scoreBlue;
-    document.getElementById("score2").innerText = scoreRed;
-
-    logContainer.innerHTML = "";
-    if(serverRoom.logs) {
-        serverRoom.logs.forEach(log => appendLogToUI(log));
-    }
-
-    toggleUIVisibility();
-});
-
-socket.on("onMatchCapacityChange", (data) => {
-    maxBluePlayers = data.blueMax;
-    maxRedPlayers = data.redMax;
-    maxBlueInput.value = maxBluePlayers;
-    maxRedInput.value = maxRedPlayers;
-    buildActivePlayersPool(true);
-});
-
-socket.on("onRoomOwnersUpdate", (ownersList) => {
-    ownersList.forEach(data => {
-        const target = activePlayers.find(p => p.team === data.team && p.id === data.id);
-        if (target) {
-            target.ownerName = data.ownerName;
-            target.socketId = data.socketId;
-            target.skillLevel = data.skillLevel || 5.0;
-            registeredNames.add(data.ownerName);
-            
-            if (data.socketId === socket.id) {
-                myControllingPlayer = target;
-            }
-        }
-    });
-    updateAdminDropdown();
-});
-
-socket.on("onPlayerMove", (data) => {
-    const target = activePlayers.find(p => p.team === data.team && p.id === data.id);
-    if (target && target.socketId !== socket.id) {
-        target.x = data.x;
-        target.y = data.y;
-        target.angle = data.angle;
-    }
-});
-
-socket.on("onBallLocation", (data) => {
-    if (!isReferee) {
-        ball.x = data.x;
-        ball.y = data.y;
-        ball.vx = data.vx;
-        ball.vy = data.vy;
-        ball.isFlying = data.isFlying;
+    if (gameState === "PLAYING") {
+        document.getElementById("statusText").textContent = "경기 진행 중";
+        document.getElementById("statusText").style.color = "#2ecc71";
+    } else if (gameState === "PAUSED") {
+        document.getElementById("statusText").textContent = "일시 정지됨";
+        document.getElementById("statusText").style.color = "#e67e22";
     }
 });
 
 socket.on("onBallAction", (data) => {
     ball.x = data.x;
     ball.y = data.y;
-    ball.vx = data.vx;
-    ball.vy = data.vy;
     ball.isFlying = data.isFlying;
-    ball.lastShooterSkill = data.lastShooterSkill || 5.0;
-    if (data.holderId) {
-        ball.holder = activePlayers.find(p => p.team === data.holderId.team && p.id === data.holderId.id);
-    } else {
-        ball.holder = null;
-    }
+    ball.holder = data.holderId ? activePlayers.find(p => p.team === data.holderId.team && p.id === data.holderId.id) : null;
 });
 
-socket.on("onRegisterOwner", (data) => {
-    const target = activePlayers.find(p => p.team === data.team && p.id === data.id);
-    if (target) {
-        target.ownerName = data.ownerName;
-        target.socketId = data.socketId;
-        target.skillLevel = data.skillLevel || 5.0;
-        registeredNames.add(data.ownerName);
-        if(data.socketId === socket.id) {
-            myControllingPlayer = target;
-        }
-        updateAdminDropdown();
-    }
+socket.on("logNotification", (message) => {
+    addLog(message);
 });
 
-socket.on("onUpdateSkillLevel", (data) => {
-    const target = activePlayers.find(p => p.team === data.team && p.id === data.id);
-    if (target) {
-        target.skillLevel = parseFloat(data.skillLevel);
-        if(ball.holder === target) {
-            ball.lastShooterSkill = target.skillLevel;
-        }
-    }
-    loadTargetSkillLevel();
-});
-
-socket.on("onLiveTeamName", (data) => {
-    if (data.team === "BLUE") {
-        teamBlueName = data.name;
-        document.getElementById("teamLabel1").innerText = data.name;
-        document.getElementById("teamNameBlueInput").value = data.name;
-    } else {
-        teamRedName = data.name;
-        document.getElementById("teamLabel2").innerText = data.name;
-        document.getElementById("teamNameRedInput").value = data.name;
-    }
-});
-
-socket.on("onRegisterDirector", (data) => {
-    if (data && data.directorName) {
-        document.getElementById("refereeZone").style.display = "none";
-        const label = document.getElementById("directorTitleLabel");
-        label.innerText = `[감독] ${data.directorName}`;
-        
-        if (socket.id === data.directorSocketId) {
-            isReferee = true;
-            myDirectorName = data.directorName;
-            
-            document.getElementById("startBtn").disabled = (gameState !== "SETUP");
-            pauseBtn.disabled = (gameState === "SETUP");
-            resetBtn.disabled = false;
-            document.getElementById("teamNameBlueInput").disabled = false;
-            document.getElementById("teamNameRedInput").disabled = false;
-            document.getElementById("adminSkillZone").style.display = "flex"; 
-            chatInputZone.style.display = "flex";
-            
-            alert(`[${data.directorName}] 감독 권한 인증에 성공했습니다.`);
-        }
-        updateAdminDropdown();
-    } else {
-        document.getElementById("refereeZone").style.display = "flex";
-        document.getElementById("directorTitleLabel").innerText = "";
-        document.getElementById("adminSkillZone").style.display = "none";
-        chatInputZone.style.display = "none";
-        if (isReferee) {
-            isReferee = false;
-            toggleUIVisibility();
-        }
-    }
-    toggleUIVisibility();
-});
-
-socket.on("onStartGame", (data) => {
-    teamBlueName = data.teamBlueName;
-    teamRedName = data.teamRedName;
-    maxBluePlayers = data.maxBluePlayers;
-    maxRedPlayers = data.maxRedPlayers;
-    gameState = "PLAYING";
-    
-    buildActivePlayersPool(true);
-    toggleUIVisibility();
-});
-
-socket.on("onResetMatch", () => {
-    gameState = "SETUP";
-    scoreBlue = 0; scoreRed = 0;
-    maxBluePlayers = 5; maxRedPlayers = 5;
-    maxBlueInput.value = 5; maxRedInput.value = 5;
-    document.getElementById("score1").innerText = 0;
-    document.getElementById("score2").innerText = 0;
-    defenseLockUntil = 0;
-    
-    myControllingPlayer = null;      
-    logContainer.innerHTML = "";     
-    
-    buildActivePlayersPool(false);
-    ball.resetBall();
-    toggleUIVisibility();
-});
-
-socket.on("onClearLogs", () => {
-    logContainer.innerHTML = "";
-});
-
-socket.on("onTogglePause", (data) => {
-    gameState = data.gameState;
-    if (data.isPaused) {
-        statusText.innerText = "[일시정지] 경기가 멈췄습니다.";
-        statusText.style.color = "#e74c3c";
-        pauseBtn.innerText = "[재개] RESUME";
-    } else {
-        statusText.innerText = "[경기 중] 매치 진행 중!";
-        statusText.style.color = "#2ecc71";
-        pauseBtn.innerText = "[정지] PAUSE";
-    }
-});
-
-socket.on("onScore", (data) => {
-    scoreBlue = data.blue;
-    scoreRed = data.red;
-    document.getElementById("score1").innerText = scoreBlue;
-    document.getElementById("score2").innerText = scoreRed;
-});
-
-socket.on("onStartDefense", (data) => {
-    const def = activePlayers.find(p => p.team === data.defTeam && p.id === data.defId);
-    const att = activePlayers.find(p => p.team === data.attTeam && p.id === data.attId);
-    if (def && att) {
-        def.lastDefenseTime = Date.now();
-        startDefenseMiniGame(def, att);
-    }
-});
-
-socket.on("onMiniGameTick", (data) => {
-    if (!isReferee) {
-        miniGameGauge = data.gauge;
-        miniGameTimer = data.timer;
-        progressBar.style.width = `${miniGameGauge}%`;
-    }
-});
-
-socket.on("onMiniGameHit", (gauge) => {
-    miniGameGauge = gauge;
-    progressBar.style.width = `${miniGameGauge}%`;
-});
-
-// 미니게임 완료 동기화 수신
-socket.on("onEndMiniGame", (resultData) => {
-    endMiniGame(resultData);
-});
-
-socket.on("onNewLog", (logEntry) => {
-    appendLogToUI(logEntry);
-});
-
-function toggleUIVisibility() {
-    const inputsDisabled = (gameState !== "SETUP" || !isReferee);
-    maxBlueInput.disabled = inputsDisabled;
-    maxRedInput.disabled = inputsDisabled;
-
-    if (gameState === "PLAYING" || gameState === "MINIGAME" || gameState === "PAUSE") {
-        document.getElementById("startBtn").disabled = true;
-        pauseBtn.disabled = !isReferee;
-        resetBtn.disabled = !isReferee;
-        if (gameState === "PAUSE") {
-            statusText.innerText = "[일시정지] 경기가 멈췄습니다.";
-            statusText.style.color = "#e74c3c";
-            pauseBtn.innerText = "[재개] RESUME";
-        } else {
-            statusText.innerText = "[경기 중] 매치 진행 중!";
-            statusText.style.color = "#2ecc71";
-            pauseBtn.innerText = "[정지] PAUSE";
-        }
-    } else {
-        statusText.innerText = isReferee ? "[대기 모드] 팀별 매치 인원을 설정하고 경기를 시작하세요." : "[관전자 모드] 코드를 입력하세요.";
-        statusText.style.color = "#f1c40f";
-        document.getElementById("startBtn").disabled = !isReferee;
-        pauseBtn.disabled = true;
-        resetBtn.disabled = !isReferee;
-        pauseBtn.innerText = "[정지] PAUSE";
-    }
-}
-
-buildActivePlayersPool(false);
-ball.resetBall();
-lastTime = performance.now(); 
+// 시스템 시작
 gameLoop();
 </script>
 </body>

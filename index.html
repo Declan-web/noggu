@@ -18,7 +18,6 @@
             overflow: hidden;
         }
         
-        /* 상단 제어 바 스타일 피팅 */
         #lobby {
             margin-bottom: 15px;
             display: flex;
@@ -77,22 +76,20 @@
             cursor: not-allowed;
         }
 
-        /* 3단 분할 레이아웃 메인 컨테이너 디자인 */
         #mainLayout {
             display: flex;
             gap: 20px;
             align-items: flex-start;
             justify-content: center;
             width: 100%;
-            max-width: 1560px;
+            max-width: 1680px; 
             padding: 0 20px;
             box-sizing: border-box;
         }
 
-        /* 양 사이드 설명/로그 박스 스타일 (시안 기반) */
         .side-panel {
             width: 240px;
-            height: 508px; /* 보더 포함 캔버스 높이 세팅 대응 */
+            height: 508px; 
             background-color: #555555;
             border-radius: 12px;
             padding: 20px;
@@ -100,6 +97,10 @@
             box-shadow: 0 4px 15px rgba(0,0,0,0.5);
             display: flex;
             flex-direction: column;
+        }
+
+        .side-panel.log-panel {
+            width: 360px; 
         }
 
         .panel-title {
@@ -112,7 +113,6 @@
             padding-bottom: 10px;
         }
 
-        /* 좌측 조작키 리스트 정렬 */
         #keyGuideList {
             display: flex;
             flex-direction: column;
@@ -131,34 +131,32 @@
             font-weight: bold;
         }
 
-        /* 우측 로그창 스크롤 및 레이아웃 */
         #logContainer {
             flex: 1;
             overflow-y: auto;
             background: #444;
             border-radius: 6px;
             padding: 10px;
-            font-size: 12px;
+            font-size: 13px; 
             display: flex;
             flex-direction: column;
             gap: 8px;
             word-break: break-all;
         }
         
-        /* 로그 타입별 가시성 색상 구분 */
         .log-item {
             border-bottom: 1px solid #555;
             padding-bottom: 4px;
+            line-height: 1.4;
         }
-        .log-time { color: #888; margin-right: 5px; }
+        .log-time { color: #aaa; margin-right: 6px; font-size: 11px; }
         .log-type-score { color: #2ecc71; font-weight: bold; }
         .log-type-defense { color: #e67e22; font-weight: bold; }
-        .log-type-chat { color: #f1c40f; font-weight: bold; }
+        .log-type-chat { color: #f1c40f; font-weight: bold; background: rgba(241, 196, 15, 0.1); border-radius: 2px; padding: 2px 4px; }
 
-        /* 감독용 채팅 입력 영역 */
         #chatInputZone {
             margin-top: 10px;
-            display: none; /* 심판 인증 시 노출 */
+            display: none; 
             gap: 5px;
         }
         #directorChatMsg {
@@ -171,7 +169,6 @@
             border-radius: 4px;
         }
 
-        /* 중앙 게임 컨테이너 구조 */
         #gameContainer {
             position: relative;
             box-shadow: 0 0 25px rgba(0,0,0,0.7);
@@ -254,13 +251,16 @@
 <body>
 
     <div id="lobby">
-        <div id="refereeZone">
-            <label for="refKey">심판 코드: </label>
+        <div id="refereeZone" style="display: flex; gap: 8px; align-items: center;">
+            <label for="refName">감독 이름: </label>
+            <input type="text" id="refName" placeholder="감독명 입력" style="width: 90px;">
+            <label for="refKey">코드: </label>
             <input type="password" id="refKey" placeholder="코드">
-            <button onclick="authReferee()" id="authBtn">인증</button>
+            <button onclick="authReferee()" id="authBtn">감독 임명</button>
         </div>
         
         <div id="adminSkillZone">
+            <label id="directorTitleLabel" style="color: #f1c40f; margin-right: 5px; font-weight: bold;"></label>
             <label>경기력 관리:</label>
             <select id="adminTargetPlayer" onchange="loadTargetSkillLevel()"></select>
             <input type="number" id="adminSkillInput" min="5.0" max="9.9" step="0.1" value="5.0">
@@ -281,9 +281,9 @@
             <option value="4">4 VS 4</option>
             <option value="5" selected>5 VS 5</option>
         </select>
-        <button id="startBtn" onclick="startGame()" disabled>▶ GAME START</button>
-        <button id="pauseBtn" onclick="togglePause()" disabled>⏸ PAUSE</button>
-        <button id="resetBtn" onclick="triggerManualReset()" disabled>🔄 RESET MATCH</button>
+        <button id="startBtn" onclick="startGame()" disabled>[시작] GAME START</button>
+        <button id="pauseBtn" onclick="togglePause()" disabled>[정지] PAUSE</button>
+        <button id="resetBtn" onclick="triggerManualReset()" disabled>[초기화] RESET MATCH</button>
         <span id="statusText" style="color: #f1c40f; margin-left: 5px;">[관전자 모드] 코드를 입력하세요.</span>
     </div>
     
@@ -312,7 +312,7 @@
             <canvas id="gameCanvas" width="1000" height="500"></canvas>
         </div>
 
-        <div class="side-panel">
+        <div class="side-panel log-panel">
             <div class="panel-title">LOG</div>
             <div id="logContainer"></div>
             <div id="chatInputZone">
@@ -342,6 +342,7 @@ const logContainer = document.getElementById("logContainer");
 const chatInputZone = document.getElementById("chatInputZone");
 
 let isReferee = false; 
+let myDirectorName = ""; 
 
 let scoreBlue = 0;
 let scoreRed = 0;
@@ -368,7 +369,6 @@ const court = {
     rightGoal: { x: 950, y: 250, radius: 20 }
 };
 
-// [변경] 새롭게 정의된 조작키 맵핑 계획 적용 (w,a,s,d / e / shift / space)
 const onlineScheme = { 
     up: 'w', 
     down: 's', 
@@ -688,11 +688,21 @@ function updatePlayerSkill() {
 }
 
 function authReferee() {
+    const inputName = document.getElementById("refName").value.trim();
     const inputKey = document.getElementById("refKey").value;
+    
+    if (!inputName) {
+        alert("감독 이름을 입력해 주세요!");
+        return;
+    }
+
     if (inputKey === "KEY") {
         isReferee = true;
-        alert("심판 권한 인증 성공!");
+        myDirectorName = inputName;
+        alert(`[${inputName}] 감독 권한 인증 성공!`);
         
+        socket.emit("syncRegisterDirector", inputName);
+
         document.getElementById("matchType").disabled = false;
         document.getElementById("startBtn").disabled = false;
         pauseBtn.disabled = false;
@@ -700,8 +710,11 @@ function authReferee() {
         document.getElementById("teamNameBlueInput").disabled = false;
         document.getElementById("teamNameRedInput").disabled = false;
         document.getElementById("refereeZone").style.display = "none"; 
+        
+        const label = document.getElementById("directorTitleLabel");
+        label.innerText = `[감독] ${inputName}`;
         document.getElementById("adminSkillZone").style.display = "flex"; 
-        chatInputZone.style.display = "flex"; // 우측 하단 감독용 채팅창 개방
+        chatInputZone.style.display = "flex"; 
         
         updateAdminDropdown();
         
@@ -797,7 +810,6 @@ function passAction(player) {
     socket.emit("syncBallAction", { x: ball.x, y: ball.y, vx: ball.vx, vy: ball.vy, holderId: null, isFlying: true });
 }
 
-// 감독(심판) 채팅 송신
 function sendDirectorChat() {
     const input = document.getElementById("directorChatMsg");
     const text = input.value.trim();
@@ -806,7 +818,6 @@ function sendDirectorChat() {
     input.value = "";
 }
 
-// 로그 렌더링 시스템 함수
 function appendLogToUI(log) {
     const logItem = document.createElement("div");
     logItem.className = `log-item log-type-${log.type}`;
@@ -829,9 +840,7 @@ document.getElementById("gameContainer").addEventListener("contextmenu", e => {
     e.preventDefault();
 });
 
-// [변경] 마우스 이벤트 맵핑 전면 개편 (좌클릭: 캐릭터 지정 및 디펜스 시도 / 우클릭: 미니게임 연타)
 canvas.addEventListener("mousedown", e => {
-    // 1. 디펜스 미니게임 진행 중 마우스 우클릭 연타 인식
     if (gameState === "MINIGAME" && e.button === 2) {
         if (myControllingPlayer) {
             const p = myControllingPlayer;
@@ -849,13 +858,11 @@ canvas.addEventListener("mousedown", e => {
         return;
     }
 
-    // 2. 마우스 좌클릭 이벤트 분기
     if (e.button === 0) {
         const rect = canvas.getBoundingClientRect();
         const mouseX = e.clientX - rect.left;
         const mouseY = e.clientY - rect.top;
 
-        // 게임 대기(SETUP) 중일 때는 캐릭터 선택 수행
         if (gameState === "SETUP") {
             if (myControllingPlayer) {
                 alert("이미 선택한 캐릭터가 존재합니다.");
@@ -886,7 +893,6 @@ canvas.addEventListener("mousedown", e => {
                 }
             });
         }
-        // 경기 진행(PLAYING) 중 마우스 좌클릭은 수비 기술(디펜스 시도) 발동으로 변경
         else if (gameState === "PLAYING" && myControllingPlayer) {
             checkDefenseTrigger(myControllingPlayer);
         }
@@ -896,7 +902,6 @@ canvas.addEventListener("mousedown", e => {
 window.addEventListener("keydown", e => {
     if (e.key === " " || e.key === "Enter" || e.key.toLowerCase() === "shift") e.preventDefault(); 
 
-    // 대소문자 문제 방지를 위해 소문자 변환 수용
     const key = e.key.toLowerCase();
     keys[key] = true;
     
@@ -904,13 +909,10 @@ window.addEventListener("keydown", e => {
 
     if (gameState === "PLAYING" && myControllingPlayer) {
         const p = myControllingPlayer;
-        
-        // [변경] 공 줍기 E 키 바인딩
         if (key === onlineScheme.grab) {
             checkManualBallGrab(p);
         }
         if (ball.holder === p) {
-            // [변경] 슛 스페이스바 / 패스 시프트 바인딩
             if (key === onlineScheme.shoot) shootAction(p);
             if (key === onlineScheme.pass) passAction(p);
         }
@@ -956,7 +958,7 @@ function startDefenseMiniGame(defender, attacker) {
 
     const defName = defender.ownerName || `${defender.team === "BLUE" ? teamBlueName : teamRedName} ${defender.id}`;
     const attName = attacker.ownerName || `${attacker.team === "BLUE" ? teamBlueName : teamRedName} ${attacker.id}`;
-    document.getElementById("miniGameVS").innerText = `🛡️ 수비수 [${defName}] VS 🏀 공격수 [${attName}]`;
+    document.getElementById("miniGameVS").innerText = `[수비수] ${defName} VS [공격수] ${attName}`;
 
     cutIn.classList.add("active");
     setTimeout(() => {
@@ -970,7 +972,6 @@ function updateMiniGame() {
     if (gameState !== "MINIGAME") return;
     
     miniGameTimer--;
-    
     if (isReferee) {
         socket.emit("syncMiniGameTick", { gauge: miniGameGauge, timer: miniGameTimer });
     }
@@ -1024,7 +1025,6 @@ function update() {
             const p = myControllingPlayer;
             let dx = 0, dy = 0;
             
-            // [변경] w, s, a, d 맵핑 연산 전환
             if (keys[onlineScheme.up]) dy = -1;
             if (keys[onlineScheme.down]) dy = 1;
             if (keys[onlineScheme.left]) dx = -1;
@@ -1076,7 +1076,7 @@ function draw() {
         ctx.font = "bold 40px sans-serif";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.fillText("⏸ MATCH PAUSED", canvas.width / 2, canvas.height / 2);
+        ctx.fillText("[정지] MATCH PAUSED", canvas.width / 2, canvas.height / 2);
     }
 }
 
@@ -1105,6 +1105,16 @@ socket.on("onInitRoomState", (serverRoom) => {
             }
         }
     });
+
+    if(serverRoom.directorName) {
+        document.getElementById("refereeZone").style.display = "none";
+        const label = document.getElementById("directorTitleLabel");
+        label.innerText = `[감독] ${serverRoom.directorName}`;
+        if(isReferee) {
+            document.getElementById("adminSkillZone").style.display = "flex";
+        }
+    }
+
     updateAdminDropdown();
 
     teamBlueName = serverRoom.teamBlueName;
@@ -1119,7 +1129,6 @@ socket.on("onInitRoomState", (serverRoom) => {
     document.getElementById("score1").innerText = scoreBlue;
     document.getElementById("score2").innerText = scoreRed;
 
-    // 접속 시 이전 로그 내역들 일괄 렌더링 동기화
     logContainer.innerHTML = "";
     if(serverRoom.logs) {
         serverRoom.logs.forEach(log => appendLogToUI(log));
@@ -1229,6 +1238,12 @@ socket.on("onLiveTeamName", (data) => {
     }
 });
 
+socket.on("onRegisterDirector", (name) => {
+    document.getElementById("refereeZone").style.display = "none";
+    const label = document.getElementById("directorTitleLabel");
+    label.innerText = `[감독] ${name}`;
+});
+
 socket.on("onStartGame", (data) => {
     teamBlueName = data.teamBlueName;
     teamRedName = data.teamRedName;
@@ -1242,7 +1257,7 @@ socket.on("onResetMatch", () => {
     document.getElementById("score1").innerText = 0;
     document.getElementById("score2").innerText = 0;
     defenseLockUntil = 0;
-    logContainer.innerHTML = ""; // 로그 초기화
+    logContainer.innerHTML = "";
     initPlayers();
     ball.resetBall();
     toggleUIVisibility();
@@ -1253,11 +1268,11 @@ socket.on("onTogglePause", (data) => {
     if (data.isPaused) {
         statusText.innerText = "[일시정지] 경기가 멈췄습니다.";
         statusText.style.color = "#e74c3c";
-        pauseBtn.innerText = "▶ RESUME";
+        pauseBtn.innerText = "[재개] RESUME";
     } else {
         statusText.innerText = "[경기 중] 매치 진행 중!";
         statusText.style.color = "#2ecc71";
-        pauseBtn.innerText = "⏸ PAUSE";
+        pauseBtn.innerText = "[정지] PAUSE";
     }
 });
 
@@ -1294,7 +1309,6 @@ socket.on("onEndMiniGame", (isDefWin) => {
     endMiniGame(isDefWin);
 });
 
-// 서버에서 발행한 새 로그 수신 브로드캐스트 리스너
 socket.on("onNewLog", (logEntry) => {
     appendLogToUI(logEntry);
 });
@@ -1307,11 +1321,11 @@ function toggleUIVisibility() {
         if (gameState === "PAUSE") {
             statusText.innerText = "[일시정지] 경기가 멈췄습니다.";
             statusText.style.color = "#e74c3c";
-            pauseBtn.innerText = "▶ RESUME";
+            pauseBtn.innerText = "[재개] RESUME";
         } else {
             statusText.innerText = "[경기 중] 매치 진행 중!";
             statusText.style.color = "#2ecc71";
-            pauseBtn.innerText = "⏸ PAUSE";
+            pauseBtn.innerText = "[정지] PAUSE";
         }
     } else {
         statusText.innerText = isReferee ? "[대기 모드] 세팅 후 시작하세요." : "[관전자 모드] 코드를 입력하세요.";
@@ -1319,7 +1333,7 @@ function toggleUIVisibility() {
         document.getElementById("startBtn").disabled = !isReferee;
         pauseBtn.disabled = true;
         resetBtn.disabled = !isReferee;
-        pauseBtn.innerText = "⏸ PAUSE";
+        pauseBtn.innerText = "[정지] PAUSE";
     }
 }
 

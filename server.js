@@ -97,7 +97,7 @@ io.on('connection', (socket) => {
     socket.on('syncRegisterDirector', (name) => {
         roomState.directorName = name;
         addServerLog(`[감독 임명] [${name}] 님이 방의 공식 감독(심판)으로 취임하셨습니다.`);
-        socket.broadcast.emit('onRegisterDirector', name);
+        io.emit('onRegisterDirector', name);
     });
 
     socket.on('syncStartGame', (data) => {

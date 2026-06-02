@@ -77,6 +77,9 @@ io.on('connection', (socket) => {
             data.skillLevel = 5.0;
             data.socketId = socket.id; 
             roomState.registeredOwners.push(data);
+        } else {
+            exists.ownerName = data.ownerName;
+            exists.socketId = socket.id;
         }
         const teamMark = data.team === 'BLUE' ? '[BLUE]' : '[RED]';
         addServerLog(`[참가] ${teamMark} ${data.ownerName} 유저가 ${data.id}번 캐릭터를 선택했습니다.`);

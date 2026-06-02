@@ -14,11 +14,13 @@ app.get('/', (req, res) => {
     res.sendFile(__dirname + '/index.html');
 });
 
-// 자유로운 인원 매치를 위해 최대 5대5 공간을 항상 열어둡니다.
+// 자유 매칭 카운트를 서버에서 방 상태로 관리합니다.
 let roomState = {
     gameState: "SETUP",
     teamBlueName: "TEAM BLUE",
     teamRedName: "TEAM RED",
+    maxBluePlayers: 5, // 기본값 5
+    maxRedPlayers: 5,  // 기본값 5
     scoreBlue: 0,
     scoreRed: 0,
     registeredOwners: [],
@@ -56,6 +58,15 @@ io.on('connection', (socket) => {
 
     socket.on('syncBallAction', (data) => {
         io.emit('onBallAction', data);
+    });
+
+    // 감독이 실시간으로 [ ] VS [ ] 인원 설정을 변경했을 때 서버 동기화
+    socket.on('syncMatchCapacity', (data) => {
+        roomState.maxBluePlayers = parseInt(data.blueMax) || 5;
+        roomState.maxRedPlayers = parseInt(data.redMax) || 5;
+        
+        addServerLog(`[설정] 감독이 경기 제한 인원을 [ ${roomState.maxBluePlayers} VS ${roomState.maxRedPlayers} ] 매치로 변경했습니다.`);
+        socket.broadcast.emit('onMatchCapacityChange', data);
     });
 
     socket.on('syncRegisterOwner', (data) => {
@@ -102,7 +113,9 @@ io.on('connection', (socket) => {
         roomState.gameState = "PLAYING";
         roomState.teamBlueName = data.teamBlueName;
         roomState.teamRedName = data.teamRedName;
-        addServerLog(`[시작] 경기가 시작되었습니다! (${data.teamBlueName} VS ${data.teamRedName})`, "system");
+        roomState.maxBluePlayers = data.maxBluePlayers;
+        roomState.maxRedPlayers = data.maxRedPlayers;
+        addServerLog(`[시작] 경기가 시작되었습니다! (${data.maxBluePlayers}vs${data.maxRedPlayers} 매치)`, "system");
         io.emit('onStartGame', data);
     });
 
@@ -110,6 +123,8 @@ io.on('connection', (socket) => {
         roomState.gameState = "SETUP";
         roomState.scoreBlue = 0;
         roomState.scoreRed = 0;
+        roomState.maxBluePlayers = 5;
+        roomState.maxRedPlayers = 5;
         roomState.registeredOwners = [];
         roomState.logs = [];
         prePauseState = "SETUP";

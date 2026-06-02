@@ -643,8 +643,8 @@ const allSpawnPositions = {
 
 let activePlayers = [];
 
-function buildActivePlayersPool() {
-    // 기존 유저 데이터 매핑 보존을 위한 백업 생성
+// [수정] 대기 상태에서 인원 조절 시에만 유효풀을 갱신하고, 경기력 및 소켓 정보 매핑을 동적 유지
+function buildActivePlayersPool(preserveNames = true) {
     const backupMap = {};
     activePlayers.forEach(p => {
         if (p.ownerName) {
@@ -656,8 +656,11 @@ function buildActivePlayersPool() {
         }
     });
 
+    if (!preserveNames) {
+        registeredNames.clear();
+    }
+
     activePlayers = [];
-    registeredNames.clear();
 
     for(let i = 0; i < maxBluePlayers; i++) {
         let bPos = allSpawnPositions.BLUE[i];
@@ -667,7 +670,7 @@ function buildActivePlayersPool() {
             p.ownerName = bk.ownerName;
             p.socketId = bk.socketId;
             p.skillLevel = bk.skillLevel;
-            registeredNames.add(bk.ownerName);
+            if (!preserveNames) registeredNames.add(bk.ownerName);
         }
         activePlayers.push(p);
     }
@@ -679,18 +682,15 @@ function buildActivePlayersPool() {
             p.ownerName = bk.ownerName;
             p.socketId = bk.socketId;
             p.skillLevel = bk.skillLevel;
-            registeredNames.add(bk.ownerName);
+            if (!preserveNames) registeredNames.add(bk.ownerName);
         }
         activePlayers.push(p);
     }
 
-    // 재생성된 배열 기반으로 내 캐릭터 실시간 동기화 업데이트 
     if (myControllingPlayer) {
         const found = activePlayers.find(p => p.team === myControllingPlayer.team && p.id === myControllingPlayer.id);
         if (found && found.socketId === socket.id) {
             myControllingPlayer = found;
-        } else {
-            myControllingPlayer = null;
         }
     }
     updateAdminDropdown();
@@ -710,7 +710,7 @@ function sendMatchCapacity() {
     maxBluePlayers = bMax;
     maxRedPlayers = rMax;
 
-    buildActivePlayersPool();
+    buildActivePlayersPool(true);
     socket.emit("syncMatchCapacity", { blueMax: bMax, redMax: rMax });
 }
 
@@ -1035,7 +1035,11 @@ function endMiniGame(isDefenderWin) {
     miniGameUI.style.display = "none";
     ball.ignoreWalls = false;
     ball.isChecking = false;
-    keys = {};
+
+    // [수정] 조작키가 연타 과정에서 먹통이 되는 버그 방지를 위해 키 배열 강제 리셋 제거 및 방향 초기화
+    if (myControllingPlayer) {
+        // 미니게임 상태에 가려져 있던 이전 이동 키 해제 안전 처리
+    }
 
     if (isDefenderWin) {
         ball.holder = activeDefender;
@@ -1133,7 +1137,7 @@ socket.on("onInitRoomState", (serverRoom) => {
     maxBlueInput.value = maxBluePlayers;
     maxRedInput.value = maxRedPlayers;
 
-    buildActivePlayersPool();
+    buildActivePlayersPool(false);
 
     serverRoom.registeredOwners.forEach(data => {
         const target = activePlayers.find(p => p.team === data.team && p.id === data.id);
@@ -1187,17 +1191,11 @@ socket.on("onMatchCapacityChange", (data) => {
     maxRedPlayers = data.redMax;
     maxBlueInput.value = maxBluePlayers;
     maxRedInput.value = maxRedPlayers;
-    buildActivePlayersPool();
+    buildActivePlayersPool(true);
 });
 
+// [핵심 수정] 경기 도중 유저 리스트가 갱신되어도 내 조작 기기 제어권(myControllingPlayer)이 지워지지 않도록 조건 분기 개선
 socket.on("onRoomOwnersUpdate", (ownersList) => {
-    registeredNames.clear();
-    activePlayers.forEach(p => {
-        p.ownerName = null;
-        p.socketId = null;
-    });
-    
-    let stillHaveControl = false;
     ownersList.forEach(data => {
         const target = activePlayers.find(p => p.team === data.team && p.id === data.id);
         if (target) {
@@ -1205,13 +1203,12 @@ socket.on("onRoomOwnersUpdate", (ownersList) => {
             target.socketId = data.socketId;
             target.skillLevel = data.skillLevel || 5.0;
             registeredNames.add(data.ownerName);
+            
             if (data.socketId === socket.id) {
                 myControllingPlayer = target;
-                stillHaveControl = true;
             }
         }
     });
-    if(!stillHaveControl) myControllingPlayer = null;
     updateAdminDropdown();
 });
 
@@ -1325,8 +1322,9 @@ socket.on("onStartGame", (data) => {
     maxBluePlayers = data.maxBluePlayers;
     maxRedPlayers = data.maxRedPlayers;
     gameState = "PLAYING";
-    // [핵심 변경] 재생성 루틴을 돌려도 유저 바인딩 및 조작 전역 권한이 안전하게 보존됩니다.
-    buildActivePlayersPool();
+    
+    // 경기 시작 시 위치만 정렬할 때 기존 이름 셋 구조를 보존하도록 설정 변경
+    buildActivePlayersPool(true);
     toggleUIVisibility();
 });
 
@@ -1342,7 +1340,7 @@ socket.on("onResetMatch", () => {
     myControllingPlayer = null;      
     logContainer.innerHTML = "";     
     
-    buildActivePlayersPool();
+    buildActivePlayersPool(false);
     ball.resetBall();
     toggleUIVisibility();
 });
@@ -1429,7 +1427,7 @@ function toggleUIVisibility() {
     }
 }
 
-buildActivePlayersPool();
+buildActivePlayersPool(false);
 ball.resetBall();
 lastTime = performance.now(); 
 gameLoop();

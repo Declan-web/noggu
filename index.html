@@ -179,6 +179,7 @@
             border: 4px solid #fff;
             display: block;
             border-radius: 4px;
+            outline: none;
         }
         #cutIn {
             position: absolute;
@@ -311,7 +312,7 @@
                 <div class="key-row"><span>패스</span><span class="key-val">Shift</span></div>
                 <div class="key-row"><span>슛</span><span class="key-val">Space</span></div>
                 <div class="key-row"><span>디펜스 시도</span><span class="key-val">좌클릭</span></div>
-                <div class="key-row"><span>디펜스 미니게임</span><span class="key-val">우클릭</span></div>
+                <div class="key-row"><span>디펜스 미니게임</span><span class="key-val">우클릭 연타</span></div>
             </div>
         </div>
 
@@ -643,7 +644,6 @@ const allSpawnPositions = {
 
 let activePlayers = [];
 
-// [수정] 대기 상태에서 인원 조절 시에만 유효풀을 갱신하고, 경기력 및 소켓 정보 매핑을 동적 유지
 function buildActivePlayersPool(preserveNames = true) {
     const backupMap = {};
     activePlayers.forEach(p => {
@@ -874,12 +874,19 @@ function appendLogToUI(log) {
     logContainer.scrollTop = logContainer.scrollHeight;
 }
 
-document.getElementById("gameContainer").addEventListener("contextmenu", e => {
-    e.preventDefault();
+// 브라우저 기본 컨텍스트 메뉴(우클릭 팝업) 방지
+window.addEventListener("contextmenu", e => {
+    const rect = canvas.getBoundingClientRect();
+    if (e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom) {
+        e.preventDefault();
+    }
 });
 
-canvas.addEventListener("mousedown", e => {
+// [★ 핵심 전면 교체] 마우스 클릭 감지를 전역(window)단에서 가로채 포커스 씹힘 버그 100% 완전 차단
+window.addEventListener("mousedown", e => {
+    // 1. 디펜스 미니게임 진행 중 마우스 우클릭(e.button === 2) 처리
     if (gameState === "MINIGAME" && e.button === 2) {
+        e.preventDefault();
         if (myControllingPlayer) {
             const p = myControllingPlayer;
             if (activeDefender && p.team === activeDefender.team && p.id === activeDefender.id) {
@@ -896,72 +903,82 @@ canvas.addEventListener("mousedown", e => {
         return;
     }
 
+    // 2. 마우스 좌클릭(e.button === 0) 처리 (정확한 Canvas 내부 좌표 산출 계산)
     if (e.button === 0) {
         const rect = canvas.getBoundingClientRect();
-        const mouseX = e.clientX - rect.left;
-        const mouseY = e.clientY - rect.top;
+        // 클릭 위치가 Canvas 영역 내부인지 먼저 무조건 검증
+        if (e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom) {
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
 
-        if (gameState === "SETUP") {
-            if (myControllingPlayer) {
-                alert("이미 선택한 캐릭터가 존재합니다.");
-                return;
-            }
-
-            activePlayers.forEach(p => {
-                const dist = Math.hypot(p.x - mouseX, p.y - mouseY);
-                if (dist < p.radius + 10) {
-                    if (!p.ownerName) {
-                        const name = prompt(`[${p.team === "BLUE" ? "블루" : "레드"} ${p.id}번] 유저 이름 입력:`);
-                        if (name && name.trim() !== "") {
-                            const trimmedName = name.trim();
-                            if (registeredNames.has(trimmedName)) {
-                                alert("이미 등록된 유저명입니다.");
-                                return;
-                            }
-                            p.ownerName = trimmedName;
-                            p.socketId = socket.id; 
-                            myControllingPlayer = p; 
-                            registeredNames.add(trimmedName);
-                            socket.emit("syncRegisterOwner", { team: p.team, id: p.id, ownerName: trimmedName });
-                            updateAdminDropdown();
-                        }
-                    } else {
-                        alert(`이미 선택 완료된 캐릭터입니다.`);
-                    }
+            if (gameState === "SETUP") {
+                if (myControllingPlayer) {
+                    alert("이미 선택한 캐릭터가 존재합니다.");
+                    return;
                 }
-            });
-        }
-        else if (gameState === "PLAYING" && myControllingPlayer) {
-            checkDefenseTrigger(myControllingPlayer);
+
+                activePlayers.forEach(p => {
+                    const dist = Math.hypot(p.x - mouseX, p.y - mouseY);
+                    if (dist < p.radius + 10) {
+                        if (!p.ownerName) {
+                            const name = prompt(`[${p.team === "BLUE" ? "블루" : "레드"} ${p.id}번] 유저 이름 입력:`);
+                            if (name && name.trim() !== "") {
+                                const trimmedName = name.trim();
+                                if (registeredNames.has(trimmedName)) {
+                                    alert("이미 등록된 유저명입니다.");
+                                    return;
+                                }
+                                p.ownerName = trimmedName;
+                                p.socketId = socket.id; 
+                                myControllingPlayer = p; 
+                                registeredNames.add(trimmedName);
+                                socket.emit("syncRegisterOwner", { team: p.team, id: p.id, ownerName: trimmedName });
+                                updateAdminDropdown();
+                            }
+                        } else {
+                            alert(`이미 선택 완료된 캐릭터입니다.`);
+                        }
+                    }
+                });
+            }
+            else if (gameState === "PLAYING" && myControllingPlayer) {
+                checkDefenseTrigger(myControllingPlayer);
+            }
         }
     }
 });
 
+// [★ 핵심 전면 교체] 키보드 입력 수신 대상을 전역(window)으로 완전히 잡아두어 입력 끊김 현상 해결
 window.addEventListener("keydown", e => {
-    if (e.key === " " || e.key === "Enter" || e.key.toLowerCase() === "shift") {
-        if (document.activeElement !== document.getElementById("directorChatMsg")) {
-            e.preventDefault();
-        }
+    // 채팅창을 입력 중일 때는 인게임 조작 키 작동을 완전히 분기 처리하여 씹힘 방지
+    if (document.activeElement === document.getElementById("directorChatMsg")) {
+        return;
     }
 
     const key = e.key.toLowerCase();
     keys[key] = true;
     
+    // E, Shift, Space, ArrowKey 등의 기본 브라우저 스크롤 현상 완벽 방지
+    if (e.key === " " || e.key === "Enter" || e.key.toLowerCase() === "shift") {
+        e.preventDefault();
+    }
+
     if (gameState === "PAUSE") return; 
 
     if (gameState === "PLAYING" && myControllingPlayer) {
         const p = myControllingPlayer;
-        if (key === onlineScheme.grab) {
+        if (key === onlineScheme.grab) { // E 키
             checkManualBallGrab(p);
         }
-        if (ball.holder === p) {
-            if (key === onlineScheme.shoot) shootAction(p);
-            if (key === onlineScheme.pass) passAction(p);
+        if (ball.holder && ball.holder.team === p.team && ball.holder.id === p.id) {
+            if (key === onlineScheme.shoot) shootAction(p); // Space 키
+            if (key === onlineScheme.pass) passAction(p);   // Shift 키
         }
     }
 });
 
 window.addEventListener("keyup", e => { 
+    if (document.activeElement === document.getElementById("directorChatMsg")) return;
     keys[e.key.toLowerCase()] = false; 
 });
 
@@ -1018,48 +1035,59 @@ function updateMiniGame() {
         socket.emit("syncMiniGameTick", { gauge: miniGameGauge, timer: miniGameTimer });
     }
 
+    // [디펜스 반영] 수비수 게이지 0 달성 시 수비 승리 처리 고정
     if (miniGameGauge <= 5) {
-        if (isReferee || myControllingPlayer === activeDefender) {
-            socket.emit("syncEndMiniGame", { isDefWin: true });
-        }
+        socket.emit("syncEndMiniGame", { 
+            isDefWin: true, 
+            defTeam: activeDefender.team, 
+            defId: activeDefender.id,
+            attTeam: activeAttacker.team,
+            attId: activeAttacker.id
+        });
     } 
+    // [디펜스 반영] 공격수 게이지 100 달성 혹은 시간초과 시 수비 실패(공격 승리) 고정
     else if (miniGameGauge >= 95 || miniGameTimer <= 0) {
-        if (isReferee || myControllingPlayer === activeAttacker) {
-            socket.emit("syncEndMiniGame", { isDefWin: false });
-        }
+        socket.emit("syncEndMiniGame", { 
+            isDefWin: false, 
+            defTeam: activeDefender.team, 
+            defId: activeDefender.id,
+            attTeam: activeAttacker.team,
+            attId: activeAttacker.id
+        });
     } 
 }
 
-function endMiniGame(isDefenderWin) {
+// [디펜스 결과 완벽 반영] 승패 판정 후 이긴 유저에게 물리 소유권(ball.holder)을 무조건 동기화 부여
+function endMiniGame(resultData) {
     gameState = "PLAYING";
     miniGameUI.style.display = "none";
     ball.ignoreWalls = false;
     ball.isChecking = false;
 
-    // [수정] 조작키가 연타 과정에서 먹통이 되는 버그 방지를 위해 키 배열 강제 리셋 제거 및 방향 초기화
-    if (myControllingPlayer) {
-        // 미니게임 상태에 가려져 있던 이전 이동 키 해제 안전 처리
-    }
+    const currentDef = activePlayers.find(p => p.team === resultData.defTeam && p.id === resultData.defId);
+    const currentAtt = activePlayers.find(p => p.team === resultData.attTeam && p.id === resultData.attId);
 
-    if (isDefenderWin) {
-        ball.holder = activeDefender;
-        if (isReferee) {
-            socket.emit("syncBallAction", { 
-                x: ball.x, y: ball.y, vx: 0, vy: 0, holderId: { team: activeDefender.team, id: activeDefender.id }, isFlying: false 
-            });
+    if (resultData.isDefWin) {
+        // 수비수 승리 -> 이긴 사람(수비수)에게 무조건 공을 쥐어줌!
+        if (currentDef) {
+            ball.holder = currentDef;
         }
     } else {
-        const angle = Math.atan2(activeDefender.y - activeAttacker.y, activeDefender.x - activeAttacker.x);
-        activeDefender.x += Math.cos(angle) * 50;
-        activeDefender.y += Math.sin(angle) * 50;
-        if (isReferee) {
-            socket.emit("syncPlayerMove", { team: activeDefender.team, id: activeDefender.id, x: activeDefender.x, y: activeDefender.y, angle: activeDefender.angle });
+        // 공격수 승리 -> 수비수를 뒤로 날리고 공격수가 공 소유권을 완벽 지켜냄!
+        if (currentAtt) {
+            ball.holder = currentAtt;
+        }
+        if (currentDef && currentAtt) {
+            const angle = Math.atan2(currentDef.y - currentAtt.y, currentDef.x - currentAtt.x);
+            currentDef.x += Math.cos(angle) * 55;
+            currentDef.y += Math.sin(angle) * 55;
         }
     }
     
-    defenseLockUntil = Date.now() + 3000;
+    defenseLockUntil = Date.now() + 2000;
     activeDefender = null;
     activeAttacker = null;
+    keys = {}; // 미니게임 도중 꼬였거나 잔존하던 키 전면 초기화
 }
 
 function update(dt) {
@@ -1194,7 +1222,6 @@ socket.on("onMatchCapacityChange", (data) => {
     buildActivePlayersPool(true);
 });
 
-// [핵심 수정] 경기 도중 유저 리스트가 갱신되어도 내 조작 기기 제어권(myControllingPlayer)이 지워지지 않도록 조건 분기 개선
 socket.on("onRoomOwnersUpdate", (ownersList) => {
     ownersList.forEach(data => {
         const target = activePlayers.find(p => p.team === data.team && p.id === data.id);
@@ -1323,7 +1350,6 @@ socket.on("onStartGame", (data) => {
     maxRedPlayers = data.maxRedPlayers;
     gameState = "PLAYING";
     
-    // 경기 시작 시 위치만 정렬할 때 기존 이름 셋 구조를 보존하도록 설정 변경
     buildActivePlayersPool(true);
     toggleUIVisibility();
 });
@@ -1391,8 +1417,9 @@ socket.on("onMiniGameHit", (gauge) => {
     progressBar.style.width = `${miniGameGauge}%`;
 });
 
-socket.on("onEndMiniGame", (isDefWin) => {
-    endMiniGame(isDefWin);
+// 미니게임 완료 동기화 수신
+socket.on("onEndMiniGame", (resultData) => {
+    endMiniGame(resultData);
 });
 
 socket.on("onNewLog", (logEntry) => {

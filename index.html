@@ -54,7 +54,7 @@
             background-color: #444;
             color: #fff;
             border: 1px solid #666;
-            width: 50px;
+            width: 45px;
             text-align: center;
         }
         select {
@@ -247,6 +247,17 @@
         #resetBtn:hover { background-color: #962d22; }
         #clearLogBtn { background-color: #7f8c8d; color: #fff; margin-left: 5px; }
         #clearLogBtn:hover { background-color: #95a5a6; }
+        
+        .capacity-zone {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            background: #444;
+            padding: 4px 8px;
+            border-radius: 4px;
+            border: 1px solid #666;
+            font-size: 13px;
+        }
     </style>
     <script src="/socket.io/socket.io.js"></script>
 </head>
@@ -276,8 +287,14 @@
         <input type="text" id="teamNameBlueInput" value="TEAM BLUE" placeholder="블루팀명" oninput="sendLiveTeamName('BLUE')" disabled>
         <input type="text" id="teamNameRedInput" value="TEAM RED" placeholder="레드팀명" oninput="sendLiveTeamName('RED')" disabled>
 
-        <!-- 고정 인원 제한 방식을 폐지하고 상시 자유 매치 시스템으로 운영됨을 명시합니다. -->
-        <span style="color: #4cd137; font-weight: bold; font-size: 13px;">[자유 인원 매치 활성화]</span>
+        <div class="capacity-zone">
+            <span style="color: #3498db; font-weight: bold;">BLUE</span>
+            <input type="number" id="maxBlueInput" min="1" max="5" value="5" onchange="sendMatchCapacity()" disabled>
+            <span style="font-weight: bold; color: #aaa;">VS</span>
+            <input type="number" id="maxRedInput" min="1" max="5" value="5" onchange="sendMatchCapacity()" disabled>
+            <span style="color: #e74c3c; font-weight: bold;">RED</span>
+        </div>
+
         <button id="startBtn" onclick="startGame()" disabled>[시작] GAME START</button>
         <button id="pauseBtn" onclick="togglePause()" disabled>[정지] PAUSE</button>
         <button id="resetBtn" onclick="triggerManualReset()" disabled>[초기화] RESET MATCH</button>
@@ -338,6 +355,9 @@ const resetBtn = document.getElementById("resetBtn");
 const logContainer = document.getElementById("logContainer");
 const chatInputZone = document.getElementById("chatInputZone");
 
+const maxBlueInput = document.getElementById("maxBlueInput");
+const maxRedInput = document.getElementById("maxRedInput");
+
 let isReferee = false; 
 let myDirectorName = ""; 
 
@@ -345,6 +365,10 @@ let scoreBlue = 0;
 let scoreRed = 0;
 let teamBlueName = "TEAM BLUE";
 let teamRedName = "TEAM RED";
+
+// 설정 인원 한도 변수 (기본값 5 vs 5)
+let maxBluePlayers = 5;
+let maxRedPlayers = 5;
 
 let gameState = "SETUP"; 
 let miniGameGauge = 50;    
@@ -358,7 +382,6 @@ let myControllingPlayer = null;
 let keys = {}; 
 const registeredNames = new Set();
 
-// 온라인 속도 균일화를 위한 델타타임 타이머 변수
 let lastTime = performance.now();
 
 const court = {
@@ -387,10 +410,7 @@ class Player {
         this.spawnIndex = spawnIndex;
         this.radius = 16;
         
-        // 초당 프레임 독립적인 속도 설계 (기본 속도 초당 210픽셀)
         this.baseSpeed = 210; 
-        this.team = team;
-        this.id = id;
         this.color = team === "BLUE" ? "#3498db" : "#e74c3c";
         
         this.ownerName = null;     
@@ -402,8 +422,13 @@ class Player {
         this.skillLevel = 5.0;
     }
 
-    // 가시성 개선 핵심 코드: 나와 타인의 명도/테두리 변경
     draw() {
+        // 지정된 칸 범위를 초과하는 플레이어는 대기 상태(SETUP) 화면에 그리지 않습니다.
+        if (gameState === "SETUP") {
+            if (this.team === "BLUE" && this.id > maxBluePlayers) return;
+            if (this.team === "RED" && this.id > maxRedPlayers) return;
+        }
+
         const now = Date.now();
         const timePassed = now - this.lastDefenseTime;
         const isCooling = timePassed < this.defenseCooldown;
@@ -425,22 +450,19 @@ class Player {
         ctx.beginPath();
         ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
 
-        // 명도 변경: 내가 아니면 명도를 어둡게 처리해 시선 분산 방지
         if (isMe) {
             ctx.fillStyle = this.color; 
         } else {
-            // 다른 유저나 AI는 어두운 톤으로 다운 처리
             ctx.fillStyle = this.team === "BLUE" ? "#1e547b" : "#8a2b21";
         }
         ctx.fill();
 
-        // 테두리 칸 변경: 나는 노란색, 남들은 짙은 회색
         if (isMe) {
             ctx.lineWidth = 4.5;
-            ctx.strokeStyle = "#f1c40f"; // 나: 선명한 노란색
+            ctx.strokeStyle = "#f1c40f"; 
         } else {
             ctx.lineWidth = 2.0;
-            ctx.strokeStyle = this.ownerName ? "#444444" : "#cccccc"; // 남들: 짙은 회색
+            ctx.strokeStyle = this.ownerName ? "#444444" : "#cccccc"; 
         }
         ctx.stroke();
         ctx.closePath();
@@ -452,7 +474,6 @@ class Player {
         ctx.fillText(this.id, this.x, this.y);
 
         if (this.ownerName) {
-            // 내 닉네임은 더 환하게 표기
             ctx.fillStyle = isMe ? "#fff" : "#bbbbbb";
             ctx.font = isMe ? "bold 12px sans-serif" : "bold 11px sans-serif";
             ctx.fillText(`${this.ownerName} [${this.skillLevel.toFixed(1)}v]`, this.x, this.y - this.radius - 8);
@@ -466,7 +487,6 @@ class Player {
         }
     }
 
-    // 델타 타임을 적용해 언제 어디서나 동일한 이동 속도를 유지
     move(dx, dy, dt) {
         this.x += dx * this.baseSpeed * dt;
         this.y += dy * this.baseSpeed * dt;
@@ -534,7 +554,6 @@ const ball = {
         ctx.closePath();
     },
 
-    // 물리 연산 속도도 델타 타임에 비례하도록 완전 동기화 조정
     update(dt) {
         if (gameState !== "PLAYING") return;
 
@@ -545,7 +564,6 @@ const ball = {
             this.ignoreWalls = false;
             this.isChecking = false;
         } else if (this.isFlying) {
-            // 속도 벡터값에 dt 보정을 결합 (60fps 기준인 60을 승수 처리)
             this.x += this.vx * dt * 60;
             this.y += this.vy * dt * 60;
             this.vx *= Math.pow(0.98, dt * 60);
@@ -651,7 +669,6 @@ const ball = {
     }
 };
 
-// 고정 인원 대신 언제나 최대 크기인 5VS5 맵 구조를 유지하여 자유 포지션 입장을 보장합니다.
 const allSpawnPositions = {
     BLUE: [ {x:200, y:250}, {x:320, y:130}, {x:320, y:370}, {x:120, y:160}, {x:120, y:340} ],
     RED:  [ {x:800, y:250}, {x:680, y:130}, {x:680, y:370}, {x:880, y:160}, {x:880, y:340} ]
@@ -659,20 +676,40 @@ const allSpawnPositions = {
 
 let activePlayers = [];
 
-function initPlayers() {
+// 감독 설정 인원 한도만큼 실동작 캐릭터 풀을 유연하게 빌드합니다.
+function buildActivePlayersPool() {
     activePlayers = [];
     registeredNames.clear();
-    myControllingPlayer = null; 
 
-    // 인원수 구별 제한 없이 무조건 5개씩의 자리를 생성하여 1vs5 등 자유 배치가 가능하게 합니다.
-    for(let i = 0; i < 5; i++) {
+    // 블루팀 인원 한도만큼 생성
+    for(let i = 0; i < maxBluePlayers; i++) {
         let bPos = allSpawnPositions.BLUE[i];
         activePlayers.push(new Player(bPos.x, bPos.y, "BLUE", i+1, i));
-
+    }
+    // 레드팀 인원 한도만큼 생성
+    for(let i = 0; i < maxRedPlayers; i++) {
         let rPos = allSpawnPositions.RED[i];
         activePlayers.push(new Player(rPos.x, rPos.y, "RED", i+1, i));
     }
     updateAdminDropdown();
+}
+
+function sendMatchCapacity() {
+    if (!isReferee) return;
+    let bMax = parseInt(maxBlueInput.value) || 5;
+    let rMax = parseInt(maxRedInput.value) || 5;
+
+    if (bMax < 1) bMax = 1; if (bMax > 5) bMax = 5;
+    if (rMax < 1) rMax = 1; if (rMax > 5) rMax = 5;
+
+    maxBlueInput.value = bMax;
+    maxRedInput.value = rMax;
+
+    maxBluePlayers = bMax;
+    maxRedPlayers = rMax;
+
+    buildActivePlayersPool();
+    socket.emit("syncMatchCapacity", { blueMax: bMax, redMax: rMax });
 }
 
 function updateAdminDropdown() {
@@ -756,7 +793,12 @@ function startGame() {
     if (gameState === "SETUP") {
         teamBlueName = document.getElementById("teamNameBlueInput").value.trim() || "TEAM BLUE";
         teamRedName = document.getElementById("teamNameRedInput").value.trim() || "TEAM RED";
-        socket.emit("syncStartGame", { teamBlueName, teamRedName });
+        socket.emit("syncStartGame", { 
+            teamBlueName, 
+            teamRedName,
+            maxBluePlayers,
+            maxRedPlayers
+        });
     }
 }
 
@@ -929,7 +971,6 @@ function checkManualBallGrab(player) {
     }
 }
 
-// 다인 경기 디펜스 미적용 문제 완벽 조치 코드 (거리 판정 증가 및 실시간 홀더 추적 강화)
 function checkDefenseTrigger(defender) {
     const now = Date.now();
     if (now < defenseLockUntil) return;
@@ -937,7 +978,6 @@ function checkDefenseTrigger(defender) {
 
     if (ball.holder && ball.holder.team !== defender.team) {
         const dist = Math.hypot(defender.x - ball.holder.x, defender.y - ball.holder.y);
-        // 디펜스 유효 거리를 기존 25에서 40으로 증가시켜 넷코드 오차로 씹히지 않게 확실히 판정함
         if (dist < defender.radius + ball.holder.radius + 40) {
             defender.lastDefenseTime = now; 
             socket.emit("syncStartDefense", { defTeam: defender.team, defId: defender.id, attTeam: ball.holder.team, attId: ball.holder.id });
@@ -1012,7 +1052,6 @@ function endMiniGame(isDefenderWin) {
     activeAttacker = null;
 }
 
-// 델타 타임을 루프 연산에 전달하여 고주사율 유저와 저주사율 유저의 속도를 일정하게 제어
 function update(dt) {
     if (gameState === "PAUSE") return;
 
@@ -1027,19 +1066,19 @@ function update(dt) {
             if (keys[onlineScheme.right]) dx = 1;
             
             if (dx !== 0 || dy !== 0) {
-                p.move(dx, dy, dt); // 델타 타임 반영 적용
+                p.move(dx, dy, dt); 
                 socket.emit("syncPlayerMove", { team: p.team, id: p.id, x: p.x, y: p.y, angle: p.angle });
             }
         }
 
         activePlayers.forEach(p => {
             if (!p.ownerName && isReferee) {
-                p.updateAI(dt); // AI도 똑같이 시간 보정
+                p.updateAI(dt); 
                 socket.emit("syncPlayerMove", { team: p.team, id: p.id, x: p.x, y: p.y, angle: p.angle });
             }
         });
 
-        ball.update(dt); // 공의 마찰 및 가속도 보정
+        ball.update(dt); 
         if (isReferee) {
             socket.emit("syncBallLocation", { x: ball.x, y: ball.y, vx: ball.vx, vy: ball.vy, isFlying: ball.isFlying });
         }
@@ -1076,15 +1115,10 @@ function draw() {
     }
 }
 
-// 델타 타임을 실시간 계산하는 최적화 게임 루프 구조
 function gameLoop() {
     const now = performance.now();
-    // 초 단위로 프레임 경과 시간을 측정 (예: 60fps 일 때 0.0166초)
     let dt = (now - lastTime) / 1000;
-    
-    // 비정상적인 버벅임이나 탭 전환 시 튀는 것을 막기 위해 최대 상한값 설정
     if (dt > 0.1) dt = 0.1; 
-    
     lastTime = now;
 
     update(dt);
@@ -1095,7 +1129,13 @@ function gameLoop() {
 socket.on("onInitRoomState", (serverRoom) => {
     gameState = serverRoom.gameState;
     
-    initPlayers();
+    maxBluePlayers = serverRoom.maxBluePlayers || 5;
+    maxRedPlayers = serverRoom.maxRedPlayers || 5;
+    
+    maxBlueInput.value = maxBluePlayers;
+    maxRedInput.value = maxRedPlayers;
+
+    buildActivePlayersPool();
 
     serverRoom.registeredOwners.forEach(data => {
         const target = activePlayers.find(p => p.team === data.team && p.id === data.id);
@@ -1142,6 +1182,14 @@ socket.on("onInitRoomState", (serverRoom) => {
     }
 
     toggleUIVisibility();
+});
+
+socket.on("onMatchCapacityChange", (data) => {
+    maxBluePlayers = data.blueMax;
+    maxRedPlayers = data.redMax;
+    maxBlueInput.value = maxBluePlayers;
+    maxRedInput.value = maxRedPlayers;
+    buildActivePlayersPool();
 });
 
 socket.on("onRoomOwnersUpdate", (ownersList) => {
@@ -1276,18 +1324,23 @@ socket.on("onRegisterDirector", (data) => {
 socket.on("onStartGame", (data) => {
     teamBlueName = data.teamBlueName;
     teamRedName = data.teamRedName;
+    maxBluePlayers = data.maxBluePlayers;
+    maxRedPlayers = data.maxRedPlayers;
     gameState = "PLAYING";
+    buildActivePlayersPool();
     toggleUIVisibility();
 });
 
 socket.on("onResetMatch", () => {
     gameState = "SETUP";
     scoreBlue = 0; scoreRed = 0;
+    maxBluePlayers = 5; maxRedPlayers = 5;
+    maxBlueInput.value = 5; maxRedInput.value = 5;
     document.getElementById("score1").innerText = 0;
     document.getElementById("score2").innerText = 0;
     defenseLockUntil = 0;
     logContainer.innerHTML = "";
-    initPlayers();
+    buildActivePlayersPool();
     ball.resetBall();
     toggleUIVisibility();
 });
@@ -1347,6 +1400,10 @@ socket.on("onNewLog", (logEntry) => {
 });
 
 function toggleUIVisibility() {
+    const inputsDisabled = (gameState !== "SETUP" || !isReferee);
+    maxBlueInput.disabled = inputsDisabled;
+    maxRedInput.disabled = inputsDisabled;
+
     if (gameState === "PLAYING" || gameState === "MINIGAME" || gameState === "PAUSE") {
         document.getElementById("startBtn").disabled = true;
         pauseBtn.disabled = !isReferee;
@@ -1361,7 +1418,7 @@ function toggleUIVisibility() {
             pauseBtn.innerText = "[정지] PAUSE";
         }
     } else {
-        statusText.innerText = isReferee ? "[대기 모드] 자유롭게 유저 배치 후 시작하세요." : "[관전자 모드] 코드를 입력하세요.";
+        statusText.innerText = isReferee ? "[대기 모드] 팀별 매치 인원을 설정하고 경기를 시작하세요." : "[관전자 모드] 코드를 입력하세요.";
         statusText.style.color = "#f1c40f";
         document.getElementById("startBtn").disabled = !isReferee;
         pauseBtn.disabled = true;
@@ -1370,10 +1427,9 @@ function toggleUIVisibility() {
     }
 }
 
-// 초기 시작선언
-initPlayers();
+buildActivePlayersPool();
 ball.resetBall();
-lastTime = performance.now(); // 타이머 동기화 기점 초기화
+lastTime = performance.now(); 
 gameLoop();
 </script>
 </body>

@@ -11,7 +11,7 @@ app.get('/', (req, res) => {
     res.sendFile(__dirname + '/index.html');
 });
 
-// 방 상태 관리
+// 방 상태 구조 관리
 let roomState = {
     gameState: "SETUP",
     teamBlueName: "TEAM BLUE",
@@ -25,6 +25,8 @@ let roomState = {
     directorSocketId: null, 
     logs: [] 
 };
+
+let prePauseState = "SETUP";
 
 function addServerLog(message, type = "system") {
     const logEntry = {
@@ -46,44 +48,54 @@ io.on('connection', (socket) => {
         socket.broadcast.emit('onPlayerMovement', data);
     });
 
-    // [공 줍기 및 액션 처리 - 추가됨]
+    // [핵심 해결 1: 공 줍기/슛/패스 동기화]
+    // 기존에 누락되었던 공 상호작용을 broadcast하여 모든 클라이언트가 공의 위치를 공유함
     socket.on('syncBallAction', (data) => {
-        // 공 상태를 서버가 관리하고 모든 클라이언트에게 공유
         socket.broadcast.emit('onBallAction', data);
     });
 
-    // [선수 선택 등록 및 초기화 관련]
+    // [선수 등록]
     socket.on('syncRegisterOwner', (data) => {
-        // 기존 동일 위치 등록자 제거 (초기화 방지)
         roomState.registeredOwners = roomState.registeredOwners.filter(p => !(p.team === data.team && p.id === data.id));
         roomState.registeredOwners.push({ ...data, socketId: socket.id });
         io.emit('onRegisterOwner', data);
     });
 
-    // [감독 권한 인증]
+    // [게임 상태 및 감독 권한]
+    socket.on('syncGameState', (data) => {
+        roomState.gameState = data.state;
+        io.emit('onGameStateChange', data);
+    });
+
     socket.on('syncRefereeAuth', (data) => {
         roomState.directorName = data.name;
         roomState.directorSocketId = socket.id;
         io.emit('onRegisterDirector', { directorName: data.name, directorSocketId: socket.id });
     });
 
-    // [게임 제어]
-    socket.on('syncGameState', (data) => {
-        roomState.gameState = data.state;
-        io.emit('onGameStateChange', data);
+    // [점수 및 미니게임]
+    socket.on('syncScore', (data) => {
+        roomState.scoreBlue = data.blue;
+        roomState.scoreRed = data.red;
+        io.emit('onScoreUpdate', data);
     });
 
-    // [연결 종료 시 선수 슬롯 초기화 - 해결됨]
+    socket.on('syncEndMiniGame', (data) => {
+        roomState.gameState = "PLAYING";
+        io.emit('onEndMiniGame', data);
+    });
+
+    // [핵심 해결 2: 연결 종료 시 선수 슬롯 초기화]
+    // 나간 유저의 정보를 찾아 배열에서 제거하고, 빈 슬롯 상태를 모든 클라이언트에 알림
     socket.on('disconnect', () => {
-        // 나간 유저가 등록한 선수 슬롯을 찾아 삭제
         const leftPlayer = roomState.registeredOwners.find(p => p.socketId === socket.id);
         if (leftPlayer) {
             roomState.registeredOwners = roomState.registeredOwners.filter(p => p.socketId !== socket.id);
-            // 전체 클라이언트에게 해당 슬롯이 비었음을 알림
-            io.emit('onInitRoomState', roomState); 
+            // 슬롯 비우기 신호 (빈 이름으로 업데이트)
+            io.emit('onRegisterOwner', { team: leftPlayer.team, id: leftPlayer.id, ownerName: "", skillLevel: 5.0 });
             addServerLog(`[시스템] ${leftPlayer.name} 님이 퇴장하여 슬롯이 초기화되었습니다.`);
         }
-        
+
         if (socket.id === roomState.directorSocketId) {
             roomState.directorName = null;
             roomState.directorSocketId = null;
@@ -91,11 +103,9 @@ io.on('connection', (socket) => {
         }
     });
 
-    // 기타 기존 로직들 (점수, 로그 등) 생략 없이 포함 가능
-    socket.on('syncScore', (data) => {
-        roomState.scoreBlue = data.blue;
-        roomState.scoreRed = data.red;
-        io.emit('onScoreUpdate', data);
+    socket.on('sendDirectorChat', (msg) => {
+        const name = roomState.directorName || "미지정";
+        addServerLog(`[감독 ${name}] ${msg}`, "chat");
     });
 });
 

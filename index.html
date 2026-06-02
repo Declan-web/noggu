@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>다들 뛰어!</title>
+    <title>다들 모여!</title>
     <style>
         body {
             margin: 0;
@@ -82,7 +82,7 @@
             align-items: flex-start;
             justify-content: center;
             width: 100%;
-            max-width: 1680px; 
+            max-width: 1780px; 
             padding: 0 20px;
             box-sizing: border-box;
         }
@@ -100,7 +100,7 @@
         }
 
         .side-panel.log-panel {
-            width: 360px; 
+            width: 480px; 
         }
 
         .panel-title {
@@ -136,7 +136,7 @@
             overflow-y: auto;
             background: #444;
             border-radius: 6px;
-            padding: 10px;
+            padding: 12px;
             font-size: 13px; 
             display: flex;
             flex-direction: column;
@@ -462,7 +462,7 @@ class Player {
         let dx = 0, dy = 0;
         if (ball.holder === this) {
             this.angle = this.team === "BLUE" ? 0 : Math.PI;
-            const targetGoal = this.team === "BLUE" ? court.rightGoal : court.leftGoal;
+            const targetGoal = this.team === "BLUE" ? court.rightGoal; : court.leftGoal;
             const distToGoal = Math.hypot(targetGoal.x - this.x, targetGoal.y - this.y);
             if (distToGoal > 160) {
                 dx = targetGoal.x - this.x;

@@ -4,7 +4,7 @@ const http = require('http').createServer(app);
 const io = require('socket.io')(http, {
     cors: {
         origin: "*",
-        methods: ["GET", "POST"]
+        methods: [["GET", "POST"]]
     }
 });
 
@@ -44,164 +44,167 @@ function addServerLog(message, type = "system") {
 }
 
 io.on('connection', (socket) => {
-    console.log(`클라이언트 소켓 연결 완료: ${socket.id}`);
-
+    // 최초 접속 시 현재 방의 전체 상태 동기화 전달
     socket.emit('onInitRoomState', roomState);
 
-    socket.on('syncPlayerMove', (data) => {
-        const p = roomState.registeredOwners.find(o => o.team === data.team && o.id === data.id);
-        if (p) {
-            p.x = data.x;
-            p.y = data.y;
+    // 감독 임명 동기화
+    socket.on('syncRegisterDirector', (name) => {
+        if (!roomState.directorName) {
+            roomState.directorName = name;
+            roomState.directorSocketId = socket.id;
+            io.emit('onRegisterDirector', { directorName: name, directorSocketId: socket.id });
+            addServerLog(`[임명] [${name}] 님이 이 매치의 공식 감독관으로 취임했습니다.`);
         }
-        socket.broadcast.emit('onPlayerMove', data);
     });
 
-    socket.on('syncBallLocation', (data) => {
-        socket.broadcast.emit('onBallLocation', data);
-    });
-
-    socket.on('syncBallAction', (data) => {
-        io.emit('onBallAction', data);
-    });
-
+    // 매치 인원수 변경 동기화
     socket.on('syncMatchCapacity', (data) => {
-        roomState.maxBluePlayers = parseInt(data.blueMax) || 5;
-        roomState.maxRedPlayers = parseInt(data.redMax) || 5;
-        socket.broadcast.emit('onMatchCapacityChange', data);
+        roomState.maxBluePlayers = data.blueMax;
+        roomState.maxRedPlayers = data.redMax;
+        io.emit('onMatchCapacityChange', data);
     });
 
-    socket.on('syncRegisterOwner', (data) => {
-        const exists = roomState.registeredOwners.find(p => p.team === data.team && p.id === data.id);
-        if (!exists) {
-            data.skillLevel = 5.0;
-            data.socketId = socket.id; 
-            roomState.registeredOwners.push(data);
-        } else {
-            exists.ownerName = data.ownerName;
-            exists.socketId = socket.id;
-        }
-        const teamMark = data.team === 'BLUE' ? '[BLUE]' : '[RED]';
-        addServerLog(`[참가] ${teamMark} ${data.ownerName} 유저가 ${data.id}번 캐릭터를 선택했습니다.`);
-        io.emit('onRegisterOwner', data); 
-    });
-
-    socket.on('syncUpdateSkillLevel', (data) => {
-        const target = roomState.registeredOwners.find(p => p.team === data.team && p.id === data.id);
-        if (target) {
-            target.skillLevel = parseFloat(data.skillLevel);
-            const teamMark = target.team === 'BLUE' ? '[BLUE]' : '[RED]';
-            addServerLog(`[관리] 감독이 ${teamMark} ${target.ownerName} 선수의 경기력을 ${target.skillLevel.toFixed(1)}v로 조정했습니다.`);
-        }
-        io.emit('onUpdateSkillLevel', data);
-    });
-
+    // 팀 실시간 이름 변경 동기화
     socket.on('syncLiveTeamName', (data) => {
-        if (data.team === "BLUE") {
+        if (data.team === 'BLUE') {
             roomState.teamBlueName = data.name;
-        } else if (data.team === "RED") {
+        } else {
             roomState.teamRedName = data.name;
         }
         socket.broadcast.emit('onLiveTeamName', data);
     });
 
-    socket.on('syncRegisterDirector', (name) => {
-        roomState.directorName = name;
-        roomState.directorSocketId = socket.id;
-        addServerLog(`[임명] [${name}] 님이 본 경기의 공식 감독관 권한을 승인받았습니다.`, "system");
-        io.emit('onRegisterDirector', { directorName: name, directorSocketId: socket.id });
+    // 캐릭터 선택 동기화
+    socket.on('syncRegisterOwner', (data) => {
+        const idx = roomState.registeredOwners.findIndex(p => p.team === data.team && p.id === data.id);
+        if (idx !== -1) {
+            roomState.registeredOwners[idx].ownerName = data.ownerName;
+            roomState.registeredOwners[idx].socketId = socket.id;
+        } else {
+            roomState.registeredOwners.push({
+                team: data.team,
+                id: data.id,
+                ownerName: data.ownerName,
+                socketId: socket.id,
+                skillLevel: 5.0
+            });
+        }
+        io.emit('onRegisterOwner', { team: data.team, id: data.id, ownerName: data.ownerName, socketId: socket.id });
+        addServerLog(`[입장] ${data.team === 'BLUE' ? '블루팀' : '레드팀'} ${data.id}번 캐릭터를 [${data.ownerName}] 유저가 선택했습니다.`);
     });
 
-    socket.on('syncClearLogs', () => {
-        roomState.logs = [];
-        io.emit('onClearLogs');
-        addServerLog(`[알림] 감독에 의해 전체 경기 타임라인 로그가 초기화되었습니다.`, "system");
+    // 경기력 관리 값 수정 동기화
+    socket.on('syncUpdateSkillLevel', (data) => {
+        const found = roomState.registeredOwners.find(p => p.team === data.team && p.id === data.id);
+        if (found) {
+            found.skillLevel = data.skillLevel;
+            io.emit('onUpdateSkillLevel', data);
+            addServerLog(`[설정] ${data.team === 'BLUE' ? '블루팀' : '레드팀'} ${data.id}번(${found.ownerName})의 경기력이 v${data.skillLevel.toFixed(1)}로 조정되었습니다.`);
+        }
     });
 
+    // 경기 시작 동기화
     socket.on('syncStartGame', (data) => {
         roomState.gameState = "PLAYING";
         roomState.teamBlueName = data.teamBlueName;
         roomState.teamRedName = data.teamRedName;
         roomState.maxBluePlayers = data.maxBluePlayers;
         roomState.maxRedPlayers = data.maxRedPlayers;
-        addServerLog(`🏁 [경기 개시] 경기 감독관의 지시 하에 매치가 정식으로 시작되었습니다! 화이팅!`, "score");
         io.emit('onStartGame', data);
+        addServerLog(`[경기 시작] 매치가 시작되었습니다! 현재 스코어 [${roomState.scoreBlue}:${roomState.scoreRed}]`);
     });
 
+    // 실시간 좌표 동기화 (트래픽 경감을 위해 broadcast 처리)
+    socket.on('syncPlayerMove', (data) => {
+        socket.broadcast.emit('onPlayerMove', data);
+    });
+
+    // 공 위치 및 행동 정보 동기화
+    socket.on('syncBallAction', (data) => {
+        socket.broadcast.emit('onBallAction', data);
+    });
+
+    // 점수 발생 동기화 및 기록
+    socket.on('syncScore', (data) => {
+        roomState.scoreBlue = data.blue;
+        roomState.scoreRed = data.red;
+        io.emit('onScoreUpdate', { blue: data.blue, red: data.red });
+
+        const scoreTeamName = data.scoringTeam === 'BLUE' ? roomState.teamBlueName : roomState.teamRedName;
+        addServerLog(`[득점] ${scoreTeamName} 팀이 2점을 추가했습니다! (현재 스코어 ${roomState.scoreBlue} : ${roomState.scoreRed})`, "score");
+    });
+
+    // 일시 정지 토글 동기화
     socket.on('syncTogglePause', () => {
-        if (roomState.gameState === "PAUSE") {
-            roomState.gameState = prePauseState;
-            addServerLog(`▶ [경기 재개] 일시정지가 해제되었습니다. 경기를 계속 진행합니다.`, "system");
-        } else {
+        if (roomState.gameState !== "PAUSE") {
             prePauseState = roomState.gameState;
             roomState.gameState = "PAUSE";
-            addServerLog(`⏸ [경기 중단] 감독 권한으로 경기가 일시 정지되었습니다.`, "system");
+            addServerLog(`[알림] 매치가 일시 정지되었습니다.`);
+        } else {
+            roomState.gameState = prePauseState;
+            addServerLog(`[알림] 매치가 다시 재개되었습니다.`);
         }
         io.emit('onGameStateChange', { state: roomState.gameState });
     });
 
+    // 전체 매치 완전 초기화 (감독 정보, 유저 할당, 로그, 스코어 올 리셋)
     socket.on('syncResetMatch', () => {
         roomState.gameState = "SETUP";
         roomState.scoreBlue = 0;
         roomState.scoreRed = 0;
         roomState.registeredOwners = [];
+        roomState.directorName = null;
+        roomState.directorSocketId = null;
         roomState.logs = [];
+
+        // 모든 소켓에 초기화 상태 강제 동기화
         io.emit('onResetMatch');
-        addServerLog(`🔄 [새 경기 준비] 경기가 완전히 리셋되었습니다. 대기실에서 캐릭터를 다시 골라주세요.`, "system");
-    });
-
-    socket.on('syncScore', (data) => {
-        roomState.scoreBlue = data.blue;
-        roomState.scoreRed = data.red;
+        io.emit('onClearLogs');
         
-        const currentTeamName = data.scoringTeam === "BLUE" ? roomState.teamBlueName : roomState.teamRedName;
-        addServerLog(`⚽ [득점] ${currentTeamName} 팀이 골을 성공시키며 2점을 획득했습니다! (${roomState.scoreBlue} VS ${roomState.scoreRed})`, "score");
-        io.emit('onScoreUpdate', data);
+        // 새로고침된 깔끔한 로그창에 첫 시작 공지만 기록
+        addServerLog(`[매치 초기화] 모든 경기 데이터, 감독 직위, 선택된 선수들이 완전히 초기화되었습니다.`);
     });
 
+    // 로그 수동 초기화 동기화
+    socket.on('syncClearLogs', () => {
+        roomState.logs = [];
+        io.emit('onClearLogs');
+    });
+
+    // 디펜스 미니게임 시작 브로드캐스트
     socket.on('syncStartMiniGame', (data) => {
         roomState.gameState = "MINIGAME";
         io.emit('onStartMiniGame', data);
     });
 
-    socket.on('syncMiniGameGauge', (gauge) => {
-        io.emit('onMiniGameGauge', gauge);
+    // 미니게임 실시간 타격 동기화
+    socket.on('syncMiniGameHit', (gauge) => {
+        socket.broadcast.emit('onMiniGameGauge', gauge);
     });
 
+    // 미니게임 완료 동기화
     socket.on('syncEndMiniGame', (data) => {
         roomState.gameState = "PLAYING";
         if (data.isDefWin) {
-            addServerLog(`[디펜스 성공] 수비가 성공하여 수비수(${data.defTeam} ${data.defId}번)가 공을 스틸했습니다!`, "defense");
+            addServerLog(`[디펜스 성공] 수비가 성공하여 수비수(ID: ${data.defTeam} ${data.defId}번)가 공을 스틸했습니다!`, "defense");
         } else {
-            addServerLog(`[디펜스 실패] 공격수(${data.attTeam} ${data.attId}번)가 수비를 제치고 돌파하여 공을 지켜냈습니다!`, "defense");
+            addServerLog(`[디펜스 실패] 공격수(ID: ${data.attTeam} ${data.attId}번)가 수비를 제치고 돌파하여 공을 지켜냈습니다!`, "defense");
         }
         io.emit('onEndMiniGame', data);
     });
 
+    // 감독 공지 메시지 송신 처리
     socket.on('sendDirectorChat', (msg) => {
         const name = roomState.directorName || "미지정";
         addServerLog(`[감독 ${name}] ${msg}`, "chat");
     });
 
+    // 퇴장(새로고침 등) 시 선수 및 감독 유지 요청에 따라 자동 파괴 로직 제거
     socket.on('disconnect', () => {
-        if (socket.id === roomState.directorSocketId) {
-            addServerLog(`[공지] 감독 [${roomState.directorName}] 님이 퇴장하여 감독 직위가 공석이 되었습니다.`);
-            roomState.directorName = null;
-            roomState.directorSocketId = null;
-            io.emit('onRegisterDirector', { directorName: null, directorSocketId: null });
-        }
-
-        const leftPlayer = roomState.registeredOwners.find(p => p.socketId === socket.id);
-        if (leftPlayer) {
-            const teamMark = leftPlayer.team === 'BLUE' ? '[BLUE]' : '[RED]';
-            addServerLog(`[퇴장] ${teamMark} ${leftPlayer.ownerName} 유저의 연결이 끊어져 선수가 대기 상태로 전환되었습니다.`, "system");
-            
-            roomState.registeredOwners = roomState.registeredOwners.filter(p => p.socketId !== socket.id);
-            io.emit('onRegisterOwner', { team: leftPlayer.team, id: leftPlayer.id, ownerName: "", skillLevel: 5.0 });
-        }
+        // [수정사항] 새로고침해도 퇴장 처리하거나 자동 파괴 공지를 띄우지 않고 그대로 복구 가능하도록 유지합니다.
     });
 });
 
 http.listen(PORT, () => {
-    console.log(`서버 실행 중: http://localhost:${PORT}`);
+    console.log(`Server is running on port ${PORT}`);
 });

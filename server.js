@@ -66,7 +66,7 @@ io.on('connection', (socket) => {
             roomState.directorToken = token;
             roomState.directorSocketId = socket.id;
             io.emit('onRegisterDirector', { directorName: name, directorSocketId: socket.id, directorToken: token });
-            addServerLog(`[임명] [${name}] 님이 이 매치의 공식 감독관으로 취임했습니다.`);
+            // [수정] 감독 임명 안내 로그 출력 코드 제거
         }
     });
 
@@ -204,7 +204,7 @@ io.on('connection', (socket) => {
         io.emit('onResetMatch');
         io.emit('onClearLogs');
         
-        addServerLog(`[매치 초기화] 모든 경기 데이터, 감독 직위, 선택된 선수들이 완전히 초기화되었습니다.`);
+        // [수정] 매치 초기화 안내 로그 출력 코드 제거
     });
 
     // 로그 수동 초기화 동기화

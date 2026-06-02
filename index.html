@@ -661,11 +661,11 @@ function buildActivePlayersPool(preserveNames = true) {
         let bPos = allSpawnPositions.BLUE[i];
         let p = new Player(bPos.x, bPos.y, "BLUE", i+1, i);
         let bk = backupMap[`BLUE_${i+1}`];
-        if (bk) {
+        if (bk && preserveNames) {
             p.ownerName = bk.ownerName;
             p.socketId = bk.socketId;
             p.skillLevel = bk.skillLevel;
-            if (!preserveNames) registeredNames.add(bk.ownerName);
+            registeredNames.add(bk.ownerName);
         }
         activePlayers.push(p);
     }
@@ -673,11 +673,11 @@ function buildActivePlayersPool(preserveNames = true) {
         let rPos = allSpawnPositions.RED[i];
         let p = new Player(rPos.x, rPos.y, "RED", i+1, i);
         let bk = backupMap[`RED_${i+1}`];
-        if (bk) {
+        if (bk && preserveNames) {
             p.ownerName = bk.ownerName;
             p.socketId = bk.socketId;
             p.skillLevel = bk.skillLevel;
-            if (!preserveNames) registeredNames.add(bk.ownerName);
+            registeredNames.add(bk.ownerName);
         }
         activePlayers.push(p);
     }
@@ -795,7 +795,7 @@ function startGame() {
 function triggerManualReset() {
     if (!isReferee) return;
     resetBtn.blur();
-    if(confirm("정말로 전체 경기를 처음 상태로 완전히 초기화하시겠습니까? (캐릭터 선택 및 모든 로그 소멸)")) {
+    if(confirm("정말로 전체 경기를 처음 상태로 완전히 초기화하시겠습니까? (감독 직위, 캐릭터 선택 및 모든 데이터 소멸)")) {
         socket.emit("syncResetMatch");
     }
 }
@@ -1148,6 +1148,13 @@ socket.on("onInitRoomState", (state) => {
         } else {
             document.getElementById("statusText").innerText = `[관전자 모드] 감독 ${state.directorName}님이 방을 관리 중입니다.`;
         }
+    } else {
+        // 감독이 없을 때의 기본 UI 원복 보장
+        isReferee = false;
+        myDirectorName = "";
+        document.getElementById("refereeZone").style.display = "flex";
+        document.getElementById("adminSkillZone").style.display = "none";
+        chatInputZone.style.display = "none";
     }
     
     gameState = state.gameState;
@@ -1164,11 +1171,6 @@ socket.on("onPlayerMove", (data) => {
         p.y = data.y;
         p.angle = data.angle;
     }
-});
-
-socket.on("onBallLocation", (data) => {
-    ball.x = data.x;
-    ball.y = data.y;
 });
 
 socket.on("onBallAction", (data) => {
@@ -1255,6 +1257,8 @@ socket.on("onRegisterDirector", (data) => {
         
         document.getElementById("teamNameBlueInput").disabled = false;
         document.getElementById("teamNameRedInput").disabled = false;
+    } else {
+        document.getElementById("statusText").innerText = `[관전자 모드] 감독 ${data.directorName}님이 방을 관리 중입니다.`;
     }
     toggleUIVisibility();
 });
@@ -1278,15 +1282,33 @@ socket.on("onGameStateChange", (data) => {
     toggleUIVisibility();
 });
 
+// 완전 올 리셋 수신 처리
 socket.on("onResetMatch", () => {
     gameState = "SETUP";
     scoreBlue = 0;
     scoreRed = 0;
     document.getElementById("score1").innerText = 0;
     document.getElementById("score2").innerText = 0;
+    
+    // 내 할당 정보 및 유저 목록 클라이언트 사이드 완전 초기화
     myControllingPlayer = null;
+    isReferee = false;
+    myDirectorName = "";
     registeredNames.clear();
+
+    // 경기장 데이터 완전 리사이클링
     buildActivePlayersPool(false);
+    ball.resetBall();
+
+    // 로비 UI 전체 원복 상태 설정
+    document.getElementById("refName").value = "";
+    document.getElementById("refKey").value = "";
+    document.getElementById("refereeZone").style.display = "flex";
+    document.getElementById("adminSkillZone").style.display = "none";
+    chatInputZone.style.display = "none";
+    document.getElementById("teamNameBlueInput").disabled = true;
+    document.getElementById("teamNameRedInput").disabled = true;
+
     toggleUIVisibility();
 });
 

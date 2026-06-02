@@ -131,7 +131,6 @@
             font-weight: bold;
         }
 
-        /* 로그 글자 크기 13px -> 15px 확대 및 줄 간격 개선 */
         #logContainer {
             flex: 1;
             overflow-y: auto;
@@ -277,14 +276,8 @@
         <input type="text" id="teamNameBlueInput" value="TEAM BLUE" placeholder="블루팀명" oninput="sendLiveTeamName('BLUE')" disabled>
         <input type="text" id="teamNameRedInput" value="TEAM RED" placeholder="레드팀명" oninput="sendLiveTeamName('RED')" disabled>
 
-        <label for="matchType">인원: </label>
-        <select id="matchType" onchange="changeMatchType()" disabled>
-            <option value="1">1 VS 1</option>
-            <option value="2">2 VS 2</option>
-            <option value="3">3 VS 3</option>
-            <option value="4">4 VS 4</option>
-            <option value="5" selected>5 VS 5</option>
-        </select>
+        <!-- 고정 인원 제한 방식을 폐지하고 상시 자유 매치 시스템으로 운영됨을 명시합니다. -->
+        <span style="color: #4cd137; font-weight: bold; font-size: 13px;">[자유 인원 매치 활성화]</span>
         <button id="startBtn" onclick="startGame()" disabled>[시작] GAME START</button>
         <button id="pauseBtn" onclick="togglePause()" disabled>[정지] PAUSE</button>
         <button id="resetBtn" onclick="triggerManualReset()" disabled>[초기화] RESET MATCH</button>
@@ -354,7 +347,6 @@ let teamBlueName = "TEAM BLUE";
 let teamRedName = "TEAM RED";
 
 let gameState = "SETUP"; 
-let currentMaxPairs = 5;
 let miniGameGauge = 50;    
 let miniGameTimer = 0;
 let activeDefender = null;
@@ -365,6 +357,9 @@ let defenseLockUntil = 0;
 let myControllingPlayer = null; 
 let keys = {}; 
 const registeredNames = new Set();
+
+// 온라인 속도 균일화를 위한 델타타임 타이머 변수
+let lastTime = performance.now();
 
 const court = {
     width: canvas.width,
@@ -391,7 +386,11 @@ class Player {
         this.id = id;
         this.spawnIndex = spawnIndex;
         this.radius = 16;
-        this.speed = 3.5;
+        
+        // 초당 프레임 독립적인 속도 설계 (기본 속도 초당 210픽셀)
+        this.baseSpeed = 210; 
+        this.team = team;
+        this.id = id;
         this.color = team === "BLUE" ? "#3498db" : "#e74c3c";
         
         this.ownerName = null;     
@@ -403,13 +402,16 @@ class Player {
         this.skillLevel = 5.0;
     }
 
+    // 가시성 개선 핵심 코드: 나와 타인의 명도/테두리 변경
     draw() {
         const now = Date.now();
         const timePassed = now - this.lastDefenseTime;
         const isCooling = timePassed < this.defenseCooldown;
 
+        const isMe = (myControllingPlayer && myControllingPlayer.team === this.team && myControllingPlayer.id === this.id);
+
+        ctx.save();
         if (this.ownerName) {
-            ctx.save();
             ctx.strokeStyle = isCooling ? "rgba(180, 180, 180, 0.4)" : "rgba(255, 242, 0, 0.75)";
             ctx.lineWidth = 2.5;
             ctx.setLineDash([4, 4]);
@@ -417,15 +419,29 @@ class Player {
             ctx.moveTo(this.x, this.y);
             ctx.lineTo(this.x + Math.cos(this.angle) * 45, this.y + Math.sin(this.angle) * 45);
             ctx.stroke();
-            ctx.restore();
         }
+        ctx.restore();
 
         ctx.beginPath();
         ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-        ctx.fillStyle = this.color;
+
+        // 명도 변경: 내가 아니면 명도를 어둡게 처리해 시선 분산 방지
+        if (isMe) {
+            ctx.fillStyle = this.color; 
+        } else {
+            // 다른 유저나 AI는 어두운 톤으로 다운 처리
+            ctx.fillStyle = this.team === "BLUE" ? "#1e547b" : "#8a2b21";
+        }
         ctx.fill();
-        ctx.lineWidth = this.ownerName ? 4 : 1.5;
-        ctx.strokeStyle = this.ownerName ? "#f1c40f" : "#fff"; 
+
+        // 테두리 칸 변경: 나는 노란색, 남들은 짙은 회색
+        if (isMe) {
+            ctx.lineWidth = 4.5;
+            ctx.strokeStyle = "#f1c40f"; // 나: 선명한 노란색
+        } else {
+            ctx.lineWidth = 2.0;
+            ctx.strokeStyle = this.ownerName ? "#444444" : "#cccccc"; // 남들: 짙은 회색
+        }
         ctx.stroke();
         ctx.closePath();
 
@@ -436,8 +452,9 @@ class Player {
         ctx.fillText(this.id, this.x, this.y);
 
         if (this.ownerName) {
-            ctx.fillStyle = "#fff";
-            ctx.font = "bold 11px sans-serif";
+            // 내 닉네임은 더 환하게 표기
+            ctx.fillStyle = isMe ? "#fff" : "#bbbbbb";
+            ctx.font = isMe ? "bold 12px sans-serif" : "bold 11px sans-serif";
             ctx.fillText(`${this.ownerName} [${this.skillLevel.toFixed(1)}v]`, this.x, this.y - this.radius - 8);
 
             if (isCooling && gameState !== "PAUSE") {
@@ -449,9 +466,10 @@ class Player {
         }
     }
 
-    move(dx, dy) {
-        this.x += dx * this.speed;
-        this.y += dy * this.speed;
+    // 델타 타임을 적용해 언제 어디서나 동일한 이동 속도를 유지
+    move(dx, dy, dt) {
+        this.x += dx * this.baseSpeed * dt;
+        this.y += dy * this.baseSpeed * dt;
         this.x = Math.max(this.radius, Math.min(court.width - this.radius, this.x));
         this.y = Math.max(this.radius, Math.min(court.height - this.radius, this.y));
 
@@ -460,7 +478,7 @@ class Player {
         }
     }
 
-    updateAI() {
+    updateAI(dt) {
         if (gameState !== "PLAYING" || this.ownerName) return;
 
         let dx = 0, dy = 0;
@@ -483,7 +501,7 @@ class Player {
 
         if (dx !== 0 || dy !== 0) {
             const length = Math.hypot(dx, dy);
-            this.move(dx / length, dy / length);
+            this.move(dx / length, dy / length, dt);
             
             if (!ball.holder && !ball.isFlying && Math.hypot(ball.x - this.x, ball.y - this.y) < this.radius + ball.radius + 2) {
                 ball.holder = this;
@@ -516,7 +534,8 @@ const ball = {
         ctx.closePath();
     },
 
-    update() {
+    // 물리 연산 속도도 델타 타임에 비례하도록 완전 동기화 조정
+    update(dt) {
         if (gameState !== "PLAYING") return;
 
         if (this.holder) {
@@ -526,10 +545,11 @@ const ball = {
             this.ignoreWalls = false;
             this.isChecking = false;
         } else if (this.isFlying) {
-            this.x += this.vx;
-            this.y += this.vy;
-            this.vx *= 0.98;
-            this.vy *= 0.98;
+            // 속도 벡터값에 dt 보정을 결합 (60fps 기준인 60을 승수 처리)
+            this.x += this.vx * dt * 60;
+            this.y += this.vy * dt * 60;
+            this.vx *= Math.pow(0.98, dt * 60);
+            this.vy *= Math.pow(0.98, dt * 60);
 
             const distToRight = Math.hypot(this.x - court.rightGoal.x, this.y - court.rightGoal.y);
             const distToLeft = Math.hypot(this.x - court.leftGoal.x, this.y - court.leftGoal.y);
@@ -631,6 +651,7 @@ const ball = {
     }
 };
 
+// 고정 인원 대신 언제나 최대 크기인 5VS5 맵 구조를 유지하여 자유 포지션 입장을 보장합니다.
 const allSpawnPositions = {
     BLUE: [ {x:200, y:250}, {x:320, y:130}, {x:320, y:370}, {x:120, y:160}, {x:120, y:340} ],
     RED:  [ {x:800, y:250}, {x:680, y:130}, {x:680, y:370}, {x:880, y:160}, {x:880, y:340} ]
@@ -643,7 +664,8 @@ function initPlayers() {
     registeredNames.clear();
     myControllingPlayer = null; 
 
-    for(let i = 0; i < currentMaxPairs; i++) {
+    // 인원수 구별 제한 없이 무조건 5개씩의 자리를 생성하여 1vs5 등 자유 배치가 가능하게 합니다.
+    for(let i = 0; i < 5; i++) {
         let bPos = allSpawnPositions.BLUE[i];
         activePlayers.push(new Player(bPos.x, bPos.y, "BLUE", i+1, i));
 
@@ -710,14 +732,6 @@ function authReferee() {
 function clearLogsFromServer() {
     if (!isReferee) return;
     socket.emit("syncClearLogs");
-}
-
-function changeMatchType() {
-    if (!isReferee) return;
-    if (gameState !== "SETUP") return;
-    currentMaxPairs = parseInt(document.getElementById("matchType").value);
-    initPlayers();
-    socket.emit("syncMatchType", currentMaxPairs);
 }
 
 function sendLiveTeamName(team) {
@@ -915,6 +929,7 @@ function checkManualBallGrab(player) {
     }
 }
 
+// 다인 경기 디펜스 미적용 문제 완벽 조치 코드 (거리 판정 증가 및 실시간 홀더 추적 강화)
 function checkDefenseTrigger(defender) {
     const now = Date.now();
     if (now < defenseLockUntil) return;
@@ -922,7 +937,8 @@ function checkDefenseTrigger(defender) {
 
     if (ball.holder && ball.holder.team !== defender.team) {
         const dist = Math.hypot(defender.x - ball.holder.x, defender.y - ball.holder.y);
-        if (dist < defender.radius + ball.holder.radius + 25) {
+        // 디펜스 유효 거리를 기존 25에서 40으로 증가시켜 넷코드 오차로 씹히지 않게 확실히 판정함
+        if (dist < defender.radius + ball.holder.radius + 40) {
             defender.lastDefenseTime = now; 
             socket.emit("syncStartDefense", { defTeam: defender.team, defId: defender.id, attTeam: ball.holder.team, attId: ball.holder.id });
         }
@@ -956,7 +972,6 @@ function updateMiniGame() {
         socket.emit("syncMiniGameTick", { gauge: miniGameGauge, timer: miniGameTimer });
     }
 
-    // 중복 전송 및 다중 처리 버그 차단: 내가 해당 당사자이거나 감독일 때 한 번만 전송을 타도록 조절
     if (miniGameGauge <= 5) {
         if (isReferee || myControllingPlayer === activeDefender) {
             socket.emit("syncEndMiniGame", { isDefWin: true });
@@ -997,7 +1012,8 @@ function endMiniGame(isDefenderWin) {
     activeAttacker = null;
 }
 
-function update() {
+// 델타 타임을 루프 연산에 전달하여 고주사율 유저와 저주사율 유저의 속도를 일정하게 제어
+function update(dt) {
     if (gameState === "PAUSE") return;
 
     if (gameState === "PLAYING") {
@@ -1011,19 +1027,19 @@ function update() {
             if (keys[onlineScheme.right]) dx = 1;
             
             if (dx !== 0 || dy !== 0) {
-                p.move(dx, dy);
+                p.move(dx, dy, dt); // 델타 타임 반영 적용
                 socket.emit("syncPlayerMove", { team: p.team, id: p.id, x: p.x, y: p.y, angle: p.angle });
             }
         }
 
         activePlayers.forEach(p => {
             if (!p.ownerName && isReferee) {
-                p.updateAI();
+                p.updateAI(dt); // AI도 똑같이 시간 보정
                 socket.emit("syncPlayerMove", { team: p.team, id: p.id, x: p.x, y: p.y, angle: p.angle });
             }
         });
 
-        ball.update();
+        ball.update(dt); // 공의 마찰 및 가속도 보정
         if (isReferee) {
             socket.emit("syncBallLocation", { x: ball.x, y: ball.y, vx: ball.vx, vy: ball.vy, isFlying: ball.isFlying });
         }
@@ -1060,16 +1076,24 @@ function draw() {
     }
 }
 
+// 델타 타임을 실시간 계산하는 최적화 게임 루프 구조
 function gameLoop() {
-    update();
+    const now = performance.now();
+    // 초 단위로 프레임 경과 시간을 측정 (예: 60fps 일 때 0.0166초)
+    let dt = (now - lastTime) / 1000;
+    
+    // 비정상적인 버벅임이나 탭 전환 시 튀는 것을 막기 위해 최대 상한값 설정
+    if (dt > 0.1) dt = 0.1; 
+    
+    lastTime = now;
+
+    update(dt);
     draw();
     requestAnimationFrame(gameLoop);
 }
 
 socket.on("onInitRoomState", (serverRoom) => {
     gameState = serverRoom.gameState;
-    currentMaxPairs = serverRoom.currentMaxPairs;
-    document.getElementById("matchType").value = currentMaxPairs;
     
     initPlayers();
 
@@ -1203,12 +1227,6 @@ socket.on("onUpdateSkillLevel", (data) => {
     loadTargetSkillLevel();
 });
 
-socket.on("onMatchType", (maxPairs) => {
-    currentMaxPairs = maxPairs;
-    document.getElementById("matchType").value = maxPairs;
-    initPlayers();
-});
-
 socket.on("onLiveTeamName", (data) => {
     if (data.team === "BLUE") {
         teamBlueName = data.name;
@@ -1231,7 +1249,6 @@ socket.on("onRegisterDirector", (data) => {
             isReferee = true;
             myDirectorName = data.directorName;
             
-            document.getElementById("matchType").disabled = false;
             document.getElementById("startBtn").disabled = (gameState !== "SETUP");
             pauseBtn.disabled = (gameState === "SETUP");
             resetBtn.disabled = false;
@@ -1275,7 +1292,6 @@ socket.on("onResetMatch", () => {
     toggleUIVisibility();
 });
 
-// 전 유저 로그 화면 비우기 수신 처리
 socket.on("onClearLogs", () => {
     logContainer.innerHTML = "";
 });
@@ -1345,7 +1361,7 @@ function toggleUIVisibility() {
             pauseBtn.innerText = "[정지] PAUSE";
         }
     } else {
-        statusText.innerText = isReferee ? "[대기 모드] 세팅 후 시작하세요." : "[관전자 모드] 코드를 입력하세요.";
+        statusText.innerText = isReferee ? "[대기 모드] 자유롭게 유저 배치 후 시작하세요." : "[관전자 모드] 코드를 입력하세요.";
         statusText.style.color = "#f1c40f";
         document.getElementById("startBtn").disabled = !isReferee;
         pauseBtn.disabled = true;
@@ -1354,8 +1370,10 @@ function toggleUIVisibility() {
     }
 }
 
+// 초기 시작선언
 initPlayers();
 ball.resetBall();
+lastTime = performance.now(); // 타이머 동기화 기점 초기화
 gameLoop();
 </script>
 </body>

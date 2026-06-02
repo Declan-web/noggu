@@ -131,25 +131,26 @@
             font-weight: bold;
         }
 
+        /* 로그 글자 크기 13px -> 15px 확대 및 줄 간격 개선 */
         #logContainer {
             flex: 1;
             overflow-y: auto;
             background: #444;
             border-radius: 6px;
             padding: 12px;
-            font-size: 13px; 
+            font-size: 15px; 
             display: flex;
             flex-direction: column;
-            gap: 8px;
+            gap: 10px;
             word-break: break-all;
         }
         
         .log-item {
             border-bottom: 1px solid #555;
-            padding-bottom: 4px;
-            line-height: 1.4;
+            padding-bottom: 6px;
+            line-height: 1.5;
         }
-        .log-time { color: #aaa; margin-right: 6px; font-size: 11px; }
+        .log-time { color: #aaa; margin-right: 6px; font-size: 12px; }
         .log-type-score { color: #2ecc71; font-weight: bold; }
         .log-type-defense { color: #e67e22; font-weight: bold; }
         .log-type-chat { color: #f1c40f; font-weight: bold; background: rgba(241, 196, 15, 0.1); border-radius: 2px; padding: 2px 4px; }
@@ -165,7 +166,7 @@
             color: #fff;
             border: 1px solid #666;
             padding: 6px;
-            font-size: 12px;
+            font-size: 13px;
             border-radius: 4px;
         }
 
@@ -245,6 +246,8 @@
         #pauseBtn:hover { background-color: #2c3e50; }
         #resetBtn { background-color: #c0392b; color: #fff; }
         #resetBtn:hover { background-color: #962d22; }
+        #clearLogBtn { background-color: #7f8c8d; color: #fff; margin-left: 5px; }
+        #clearLogBtn:hover { background-color: #95a5a6; }
     </style>
     <script src="/socket.io/socket.io.js"></script>
 </head>
@@ -265,6 +268,7 @@
             <select id="adminTargetPlayer" onchange="loadTargetSkillLevel()"></select>
             <input type="number" id="adminSkillInput" min="5.0" max="9.9" step="0.1" value="5.0">
             <button onclick="updatePlayerSkill()">적용</button>
+            <button id="clearLogBtn" onclick="clearLogsFromServer()">로그 초기화</button>
         </div>
 
         <span style="color:#555;">|</span>
@@ -703,6 +707,11 @@ function authReferee() {
     }
 }
 
+function clearLogsFromServer() {
+    if (!isReferee) return;
+    socket.emit("syncClearLogs");
+}
+
 function changeMatchType() {
     if (!isReferee) return;
     if (gameState !== "SETUP") return;
@@ -765,13 +774,7 @@ function shootAction(player) {
     ball.lastShooterSkill = player.skillLevel || 5.0;
 
     socket.emit("syncBallAction", { 
-        x: ball.x, 
-        y: ball.y, 
-        vx: ball.vx, 
-        vy: ball.vy, 
-        holderId: null, 
-        isFlying: true,
-        lastShooterSkill: player.skillLevel || 5.0
+        x: ball.x, y: ball.y, vx: ball.vx, vy: ball.vy, holderId: null, isFlying: true, lastShooterSkill: player.skillLevel || 5.0
     });
 }
 
@@ -953,11 +956,16 @@ function updateMiniGame() {
         socket.emit("syncMiniGameTick", { gauge: miniGameGauge, timer: miniGameTimer });
     }
 
+    // 중복 전송 및 다중 처리 버그 차단: 내가 해당 당사자이거나 감독일 때 한 번만 전송을 타도록 조절
     if (miniGameGauge <= 5) {
-        if (isReferee || myControllingPlayer === activeDefender) socket.emit("syncEndMiniGame", { isDefWin: true }); 
+        if (isReferee || myControllingPlayer === activeDefender) {
+            socket.emit("syncEndMiniGame", { isDefWin: true });
+        }
     } 
     else if (miniGameGauge >= 95 || miniGameTimer <= 0) {
-        if (isReferee || myControllingPlayer === activeAttacker) socket.emit("syncEndMiniGame", { isDefWin: false }); 
+        if (isReferee || myControllingPlayer === activeAttacker) {
+            socket.emit("syncEndMiniGame", { isDefWin: false });
+        }
     } 
 }
 
@@ -972,12 +980,7 @@ function endMiniGame(isDefenderWin) {
         ball.holder = activeDefender;
         if (isReferee) {
             socket.emit("syncBallAction", { 
-                x: ball.x, 
-                y: ball.y, 
-                vx: 0, 
-                vy: 0, 
-                holderId: { team: activeDefender.team, id: activeDefender.id }, 
-                isFlying: false 
+                x: ball.x, y: ball.y, vx: 0, vy: 0, holderId: { team: activeDefender.team, id: activeDefender.id }, isFlying: false 
             });
         }
     } else {
@@ -1270,6 +1273,11 @@ socket.on("onResetMatch", () => {
     initPlayers();
     ball.resetBall();
     toggleUIVisibility();
+});
+
+// 전 유저 로그 화면 비우기 수신 처리
+socket.on("onClearLogs", () => {
+    logContainer.innerHTML = "";
 });
 
 socket.on("onTogglePause", (data) => {

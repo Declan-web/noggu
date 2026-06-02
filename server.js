@@ -4,7 +4,7 @@ const http = require('http').createServer(app);
 const io = require('socket.io')(http, {
     cors: {
         origin: "*",
-        methods: [["GET", "POST"]]
+        methods: ["GET", "POST"]
     }
 });
 
@@ -23,8 +23,9 @@ let roomState = {
     maxRedPlayers: 5,
     scoreBlue: 0,
     scoreRed: 0,
-    registeredOwners: [],
+    registeredOwners: [], // { team, id, ownerName, userToken, socketId, skillLevel }
     directorName: null, 
+    directorToken: null,
     directorSocketId: null, 
     logs: [] 
 };
@@ -47,12 +48,24 @@ io.on('connection', (socket) => {
     // 최초 접속 시 현재 방의 전체 상태 동기화 전달
     socket.emit('onInitRoomState', roomState);
 
-    // 감독 임명 동기화
-    socket.on('syncRegisterDirector', (name) => {
-        if (!roomState.directorName) {
+    // 감독 임명 동기화 (세션 토큰 검증 추가)
+    socket.on('syncRegisterDirector', (data) => {
+        const { name, token } = data;
+        
+        // 이미 해당 토큰을 가진 감독이 새로고침한 경우 소켓 ID 갱신
+        if (roomState.directorToken === token) {
             roomState.directorName = name;
             roomState.directorSocketId = socket.id;
-            io.emit('onRegisterDirector', { directorName: name, directorSocketId: socket.id });
+            io.emit('onRegisterDirector', { directorName: name, directorSocketId: socket.id, directorToken: token });
+            return;
+        }
+
+        // 완전히 새로운 감독 임명
+        if (!roomState.directorName) {
+            roomState.directorName = name;
+            roomState.directorToken = token;
+            roomState.directorSocketId = socket.id;
+            io.emit('onRegisterDirector', { directorName: name, directorSocketId: socket.id, directorToken: token });
             addServerLog(`[임명] [${name}] 님이 이 매치의 공식 감독관으로 취임했습니다.`);
         }
     });
@@ -74,23 +87,52 @@ io.on('connection', (socket) => {
         socket.broadcast.emit('onLiveTeamName', data);
     });
 
-    // 캐릭터 선택 동기화
+    // 캐릭터 선택 동기화 (세션 토큰 매핑 포함)
     socket.on('syncRegisterOwner', (data) => {
-        const idx = roomState.registeredOwners.findIndex(p => p.team === data.team && p.id === data.id);
+        const { team, id, ownerName, userToken } = data;
+        
+        // 1. 동일한 토큰을 가진 유저가 새로고침 후 다시 연결을 시도하는지 확인
+        const existingTokenIdx = roomState.registeredOwners.findIndex(p => p.userToken === userToken);
+        
+        if (existingTokenIdx !== -1) {
+            // 기존에 잡고 있던 자리가 있다면 소켓 업데이트
+            roomState.registeredOwners[existingTokenIdx].socketId = socket.id;
+            io.emit('onRegisterOwner', roomState.registeredOwners[existingTokenIdx]);
+            return;
+        }
+
+        // 2. 새로운 캐릭터 선택 시 자리 선점 여부 확인
+        const idx = roomState.registeredOwners.findIndex(p => p.team === team && p.id === id);
         if (idx !== -1) {
-            roomState.registeredOwners[idx].ownerName = data.ownerName;
-            roomState.registeredOwners[idx].socketId = socket.id;
+            // 이미 다른 소켓/토큰이 선점했다면 패스 (혹은 재연결용 소켓 갱신)
+            if (roomState.registeredOwners[idx].userToken === userToken) {
+                roomState.registeredOwners[idx].socketId = socket.id;
+                io.emit('onRegisterOwner', roomState.registeredOwners[idx]);
+            }
         } else {
-            roomState.registeredOwners.push({
-                team: data.team,
-                id: data.id,
-                ownerName: data.ownerName,
+            // 완전히 비어있는 자리인 경우 등록
+            const newOwner = {
+                team: team,
+                id: id,
+                ownerName: ownerName,
+                userToken: userToken,
                 socketId: socket.id,
                 skillLevel: 5.0
-            });
+            };
+            roomState.registeredOwners.push(newOwner);
+            io.emit('onRegisterOwner', newOwner);
+            addServerLog(`[입장] ${team === 'BLUE' ? '블루팀' : '레드팀'} ${id}번 캐릭터를 [${ownerName}] 유저가 선택했습니다.`);
         }
-        io.emit('onRegisterOwner', { team: data.team, id: data.id, ownerName: data.ownerName, socketId: socket.id });
-        addServerLog(`[입장] ${data.team === 'BLUE' ? '블루팀' : '레드팀'} ${data.id}번 캐릭터를 [${data.ownerName}] 유저가 선택했습니다.`);
+    });
+
+    // 새로고침 유저가 소켓만 재연결되었을 때 기존 선수 데이터를 복구하기 위한 핸들러
+    socket.on('reconnectPlayer', (data) => {
+        const { userToken } = data;
+        const found = roomState.registeredOwners.find(p => p.userToken === userToken);
+        if (found) {
+            found.socketId = socket.id; // 신규 소켓 ID 매핑
+            io.emit('onRegisterOwner', found); // 전체 유저에게 소켓 최신화 알림
+        }
     });
 
     // 경기력 관리 값 수정 동기화
@@ -114,7 +156,7 @@ io.on('connection', (socket) => {
         addServerLog(`[경기 시작] 매치가 시작되었습니다! 현재 스코어 [${roomState.scoreBlue}:${roomState.scoreRed}]`);
     });
 
-    // 실시간 좌표 동기화 (트래픽 경감을 위해 broadcast 처리)
+    // 실시간 좌표 동기화
     socket.on('syncPlayerMove', (data) => {
         socket.broadcast.emit('onPlayerMove', data);
     });
@@ -142,26 +184,26 @@ io.on('connection', (socket) => {
             addServerLog(`[알림] 매치가 일시 정지되었습니다.`);
         } else {
             roomState.gameState = prePauseState;
+            roomState.gameState = "PLAYING"; // 기본 진행 상태 원복
             addServerLog(`[알림] 매치가 다시 재개되었습니다.`);
         }
         io.emit('onGameStateChange', { state: roomState.gameState });
     });
 
-    // 전체 매치 완전 초기화 (감독 정보, 유저 할당, 로그, 스코어 올 리셋)
+    // 전체 매치 완전 초기화 (모든 유저 데이터 및 세션 파괴)
     socket.on('syncResetMatch', () => {
         roomState.gameState = "SETUP";
         roomState.scoreBlue = 0;
         roomState.scoreRed = 0;
         roomState.registeredOwners = [];
         roomState.directorName = null;
+        roomState.directorToken = null;
         roomState.directorSocketId = null;
         roomState.logs = [];
 
-        // 모든 소켓에 초기화 상태 강제 동기화
         io.emit('onResetMatch');
         io.emit('onClearLogs');
         
-        // 새로고침된 깔끔한 로그창에 첫 시작 공지만 기록
         addServerLog(`[매치 초기화] 모든 경기 데이터, 감독 직위, 선택된 선수들이 완전히 초기화되었습니다.`);
     });
 
@@ -199,9 +241,8 @@ io.on('connection', (socket) => {
         addServerLog(`[감독 ${name}] ${msg}`, "chat");
     });
 
-    // 퇴장(새로고침 등) 시 선수 및 감독 유지 요청에 따라 자동 파괴 로직 제거
     socket.on('disconnect', () => {
-        // [수정사항] 새로고침해도 퇴장 처리하거나 자동 파괴 공지를 띄우지 않고 그대로 복구 가능하도록 유지합니다.
+        // 새로고침 시 데이터를 파괴하지 않고 상태를 고스란히 보존합니다.
     });
 });
 

@@ -346,6 +346,13 @@
 <script>
 const socket = io();
 
+// 브라우저 세션 식별 고유 토큰 생성 및 획득 (새로고침 판별용)
+let myUserToken = localStorage.getItem("basketball_user_token");
+if (!myUserToken) {
+    myUserToken = "tk_" + Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
+    localStorage.setItem("basketball_user_token", myUserToken);
+}
+
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 const cutIn = document.getElementById("cutIn");
@@ -416,6 +423,7 @@ class Player {
         
         this.ownerName = null;     
         this.socketId = null;
+        this.userToken = null; 
         this.angle = team === "BLUE" ? 0 : Math.PI; 
 
         this.lastDefenseTime = 0; 
@@ -647,6 +655,7 @@ function buildActivePlayersPool(preserveNames = true) {
             backupMap[`${p.team}_${p.id}`] = {
                 ownerName: p.ownerName,
                 socketId: p.socketId,
+                userToken: p.userToken,
                 skillLevel: p.skillLevel
             };
         }
@@ -664,6 +673,7 @@ function buildActivePlayersPool(preserveNames = true) {
         if (bk && preserveNames) {
             p.ownerName = bk.ownerName;
             p.socketId = bk.socketId;
+            p.userToken = bk.userToken;
             p.skillLevel = bk.skillLevel;
             registeredNames.add(bk.ownerName);
         }
@@ -676,17 +686,17 @@ function buildActivePlayersPool(preserveNames = true) {
         if (bk && preserveNames) {
             p.ownerName = bk.ownerName;
             p.socketId = bk.socketId;
+            p.userToken = bk.userToken;
             p.skillLevel = bk.skillLevel;
             registeredNames.add(bk.ownerName);
         }
         activePlayers.push(p);
     }
 
-    if (myControllingPlayer) {
-        const found = activePlayers.find(p => p.team === myControllingPlayer.team && p.id === myControllingPlayer.id);
-        if (found && found.socketId === socket.id) {
-            myControllingPlayer = found;
-        }
+    // 세션 토큰 기반 내 제어 캐릭터 복사 검증성 강화
+    const findMySlot = activePlayers.find(p => p.userToken === myUserToken);
+    if (findMySlot) {
+        myControllingPlayer = findMySlot;
     }
     updateAdminDropdown();
 }
@@ -754,8 +764,9 @@ function authReferee() {
         alert("감독 이름을 입력해 주세요!");
         return;
     }
-    if (inputKey === "KEY") {
-        socket.emit("syncRegisterDirector", inputName);
+    // [수정] 감독 비밀번호를 483010으로 매핑 변경
+    if (inputKey === "483010") {
+        socket.emit("syncRegisterDirector", { name: inputName, token: myUserToken });
     } else {
         alert("잘못된 심판 코드입니다!");
     }
@@ -879,11 +890,15 @@ canvas.addEventListener("mousedown", e => {
         const rect = canvas.getBoundingClientRect();
         const mouseX = e.clientX - rect.left;
         const mouseY = e.clientY - rect.top;
-        if (gameState === "SETUP") {
-            if (myControllingPlayer) {
-                alert("이미 선택한 캐릭터가 존재합니다.");
-                return;
-            }
+        
+        // 경기 중(PLAYING) 혹은 셋업창 상관 없이 내 토큰 링크 선점 유지 확인 가능
+        if ((gameState === "SETUP" || gameState === "PLAYING") && myControllingPlayer) {
+            // 마우스 클릭 위치에 디펜스 로직 연결 처리
+            if (gameState === "PLAYING") checkDefenseTrigger(myControllingPlayer);
+            return;
+        }
+
+        if (gameState === "SETUP" && !myControllingPlayer) {
             activePlayers.forEach(p => {
                 const dist = Math.hypot(p.x - mouseX, p.y - mouseY);
                 if (dist < p.radius + 10) {
@@ -897,9 +912,10 @@ canvas.addEventListener("mousedown", e => {
                             }
                             p.ownerName = trimmedName;
                             p.socketId = socket.id;
+                            p.userToken = myUserToken; // 내 고유 토큰 주입
                             myControllingPlayer = p;
                             registeredNames.add(trimmedName);
-                            socket.emit("syncRegisterOwner", { team: p.team, id: p.id, ownerName: trimmedName });
+                            socket.emit("syncRegisterOwner", { team: p.team, id: p.id, ownerName: trimmedName, userToken: myUserToken });
                             updateAdminDropdown();
                         }
                     } else {
@@ -1120,15 +1136,21 @@ socket.on("onInitRoomState", (state) => {
 
     buildActivePlayersPool(true);
 
+    // 저장된 매칭방 유저 매핑 동기화
     state.registeredOwners.forEach(data => {
         const p = activePlayers.find(o => o.team === data.team && o.id === data.id);
         if (p) {
             p.ownerName = data.ownerName;
             p.socketId = data.socketId;
+            p.userToken = data.userToken;
             p.skillLevel = data.skillLevel;
             registeredNames.add(data.ownerName);
-            if (data.socketId === socket.id) {
+            
+            // 만약 새로고침한 내 토큰정보와 저장된 토큰이 일치하면 컨트롤 복구
+            if (data.userToken === myUserToken) {
                 myControllingPlayer = p;
+                // 서버에 내 소켓 아이디 바뀐 점 자동 알림
+                socket.emit("reconnectPlayer", { userToken: myUserToken });
             }
         }
     });
@@ -1137,19 +1159,23 @@ socket.on("onInitRoomState", (state) => {
     logContainer.innerHTML = "";
     state.logs.forEach(log => appendLogToUI(log));
 
+    // 감독 권한 복구용 로직 개편
     if (state.directorName) {
-        if (state.directorSocketId === socket.id) {
+        if (state.directorToken === myUserToken) {
             isReferee = true;
             myDirectorName = state.directorName;
             document.getElementById("directorTitleLabel").innerText = `[공식 감독관: ${myDirectorName}]`;
             document.getElementById("adminSkillZone").style.display = "flex";
             document.getElementById("refereeZone").style.display = "none";
             chatInputZone.style.display = "flex";
+            document.getElementById("teamNameBlueInput").disabled = false;
+            document.getElementById("teamNameRedInput").disabled = false;
+            // 새로고침으로 끊어진 소켓 재연결 바인딩
+            socket.emit("syncRegisterDirector", { name: myDirectorName, token: myUserToken });
         } else {
             document.getElementById("statusText").innerText = `[관전자 모드] 감독 ${state.directorName}님이 방을 관리 중입니다.`;
         }
     } else {
-        // 감독이 없을 때의 기본 UI 원복 보장
         isReferee = false;
         myDirectorName = "";
         document.getElementById("refereeZone").style.display = "flex";
@@ -1204,11 +1230,18 @@ socket.on("onRegisterOwner", (data) => {
         if (data.ownerName === "") {
             p.ownerName = null;
             p.socketId = null;
+            p.userToken = null;
             p.skillLevel = 5.0;
         } else {
             p.ownerName = data.ownerName;
             p.socketId = data.socketId || null;
+            p.userToken = data.userToken || null;
             registeredNames.add(data.ownerName);
+            
+            // 나 자신이 재선점/재매핑 완료되었는지 체크
+            if (data.userToken === myUserToken) {
+                myControllingPlayer = p;
+            }
         }
     }
     updateAdminDropdown();
@@ -1247,7 +1280,7 @@ socket.on("onRegisterDirector", (data) => {
         return;
     }
 
-    if (data.directorSocketId === socket.id) {
+    if (data.directorToken === myUserToken) {
         isReferee = true;
         myDirectorName = data.directorName;
         document.getElementById("directorTitleLabel").innerText = `[공식 감독관: ${myDirectorName}]`;
@@ -1282,7 +1315,7 @@ socket.on("onGameStateChange", (data) => {
     toggleUIVisibility();
 });
 
-// 완전 올 리셋 수신 처리
+// 완전 초기화 리셋 처리 (클라이언트 로컬 변수 완전 초기화)
 socket.on("onResetMatch", () => {
     gameState = "SETUP";
     scoreBlue = 0;
@@ -1290,17 +1323,14 @@ socket.on("onResetMatch", () => {
     document.getElementById("score1").innerText = 0;
     document.getElementById("score2").innerText = 0;
     
-    // 내 할당 정보 및 유저 목록 클라이언트 사이드 완전 초기화
     myControllingPlayer = null;
     isReferee = false;
     myDirectorName = "";
     registeredNames.clear();
 
-    // 경기장 데이터 완전 리사이클링
     buildActivePlayersPool(false);
     ball.resetBall();
 
-    // 로비 UI 전체 원복 상태 설정
     document.getElementById("refName").value = "";
     document.getElementById("refKey").value = "";
     document.getElementById("refereeZone").style.display = "flex";

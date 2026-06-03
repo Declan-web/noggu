@@ -27,7 +27,8 @@ let roomState = {
     directorName: null, 
     directorToken: null,
     directorSocketId: null, 
-    logs: [] 
+    logs: [],
+    globalDefenseLockUntil: 0 // 전역 디펜스 쿨타임 종료 타임스탬프
 };
 
 let prePauseState = "SETUP";
@@ -66,7 +67,6 @@ io.on('connection', (socket) => {
             roomState.directorToken = token;
             roomState.directorSocketId = socket.id;
             io.emit('onRegisterDirector', { directorName: name, directorSocketId: socket.id, directorToken: token });
-            // [수정] 감독 임명 안내 로그 출력 코드 제거
         }
     });
 
@@ -104,7 +104,6 @@ io.on('connection', (socket) => {
         // 2. 새로운 캐릭터 선택 시 자리 선점 여부 확인
         const idx = roomState.registeredOwners.findIndex(p => p.team === team && p.id === id);
         if (idx !== -1) {
-            // 이미 다른 소켓/토큰이 선점했다면 패스 (혹은 재연결용 소켓 갱신)
             if (roomState.registeredOwners[idx].userToken === userToken) {
                 roomState.registeredOwners[idx].socketId = socket.id;
                 io.emit('onRegisterOwner', roomState.registeredOwners[idx]);
@@ -130,8 +129,8 @@ io.on('connection', (socket) => {
         const { userToken } = data;
         const found = roomState.registeredOwners.find(p => p.userToken === userToken);
         if (found) {
-            found.socketId = socket.id; // 신규 소켓 ID 매핑
-            io.emit('onRegisterOwner', found); // 전체 유저에게 소켓 최신화 알림
+            found.socketId = socket.id; 
+            io.emit('onRegisterOwner', found); 
         }
     });
 
@@ -152,6 +151,7 @@ io.on('connection', (socket) => {
         roomState.teamRedName = data.teamRedName;
         roomState.maxBluePlayers = data.maxBluePlayers;
         roomState.maxRedPlayers = data.maxRedPlayers;
+        roomState.globalDefenseLockUntil = 0; // 전역 쿨타임 초기화
         io.emit('onStartGame', data);
         addServerLog(`[경기 시작] 매치가 시작되었습니다! 현재 스코어 [${roomState.scoreBlue}:${roomState.scoreRed}]`);
     });
@@ -184,13 +184,13 @@ io.on('connection', (socket) => {
             addServerLog(`[알림] 매치가 일시 정지되었습니다.`);
         } else {
             roomState.gameState = prePauseState;
-            roomState.gameState = "PLAYING"; // 기본 진행 상태 원복
+            roomState.gameState = "PLAYING"; 
             addServerLog(`[알림] 매치가 다시 재개되었습니다.`);
         }
         io.emit('onGameStateChange', { state: roomState.gameState });
     });
 
-    // 전체 매치 완전 초기화 (모든 유저 데이터 및 세션 파괴)
+    // 전체 매치 완전 초기화
     socket.on('syncResetMatch', () => {
         roomState.gameState = "SETUP";
         roomState.scoreBlue = 0;
@@ -200,11 +200,10 @@ io.on('connection', (socket) => {
         roomState.directorToken = null;
         roomState.directorSocketId = null;
         roomState.logs = [];
+        roomState.globalDefenseLockUntil = 0;
 
         io.emit('onResetMatch');
         io.emit('onClearLogs');
-        
-        // [수정] 매치 초기화 안내 로그 출력 코드 제거
     });
 
     // 로그 수동 초기화 동기화
@@ -213,25 +212,34 @@ io.on('connection', (socket) => {
         io.emit('onClearLogs');
     });
 
-    // 디펜스 미니게임 시작 브로드캐스트
+    // 디펜스 미니게임 시작 브로드캐스트 (글로벌 쿨타임 지정 포함)
     socket.on('syncStartMiniGame', (data) => {
         roomState.gameState = "MINIGAME";
+        // 디펜스가 시작되는 시점에 전역 쿨타임 3초(3000ms) 적용 예약 설정은 미니게임이 끝난 후부터 흐르도록 설정
         io.emit('onStartMiniGame', data);
     });
 
-    // 미니게임 실시간 타격 동기화
+    // 미니게임 실시간 게이지 변동 동기화
     socket.on('syncMiniGameHit', (gauge) => {
         socket.broadcast.emit('onMiniGameGauge', gauge);
     });
 
-    // 미니게임 완료 동기화
+    // 미니게임 완료 동기화 및 3초 전역 쿨타임 시작 타임스탬프 발행
     socket.on('syncEndMiniGame', (data) => {
         roomState.gameState = "PLAYING";
+        
+        // 미니게임 종료 버튼 클릭/종료 후 시점부터 3초간 전역 디펜스 금지
+        const lockDuration = 3000; 
+        roomState.globalDefenseLockUntil = Date.now() + lockDuration;
+
         if (data.isDefWin) {
             addServerLog(`[디펜스 성공] 수비가 성공하여 수비수(ID: ${data.defTeam} ${data.defId}번)가 공을 스틸했습니다!`, "defense");
         } else {
             addServerLog(`[디펜스 실패] 공격수(ID: ${data.attTeam} ${data.attId}번)가 수비를 제치고 돌파하여 공을 지켜냈습니다!`, "defense");
         }
+        
+        // 종료 정보와 함께 전역 쿨타임 적용 종료 타임스탬프를 클라이언트에 전달
+        data.globalDefenseLockUntil = roomState.globalDefenseLockUntil;
         io.emit('onEndMiniGame', data);
     });
 

@@ -53,7 +53,6 @@ io.on('connection', (socket) => {
     socket.on('syncRegisterDirector', (data) => {
         const { name, token } = data;
         
-        // 이미 해당 토큰을 가진 감독이 새로고침한 경우 소켓 ID 갱신
         if (roomState.directorToken === token) {
             roomState.directorName = name;
             roomState.directorSocketId = socket.id;
@@ -61,7 +60,6 @@ io.on('connection', (socket) => {
             return;
         }
 
-        // 완전히 새로운 감독 임명
         if (!roomState.directorName) {
             roomState.directorName = name;
             roomState.directorToken = token;
@@ -87,21 +85,17 @@ io.on('connection', (socket) => {
         socket.broadcast.emit('onLiveTeamName', data);
     });
 
-    // 캐릭터 선택 동기화 (세션 토큰 매핑 포함)
+    // 캐릭터 선택 동기화
     socket.on('syncRegisterOwner', (data) => {
         const { team, id, ownerName, userToken } = data;
         
-        // 1. 동일한 토큰을 가진 유저가 새로고침 후 다시 연결을 시도하는지 확인
         const existingTokenIdx = roomState.registeredOwners.findIndex(p => p.userToken === userToken);
-        
         if (existingTokenIdx !== -1) {
-            // 기존에 잡고 있던 자리가 있다면 소켓 업데이트
             roomState.registeredOwners[existingTokenIdx].socketId = socket.id;
             io.emit('onRegisterOwner', roomState.registeredOwners[existingTokenIdx]);
             return;
         }
 
-        // 2. 새로운 캐릭터 선택 시 자리 선점 여부 확인
         const idx = roomState.registeredOwners.findIndex(p => p.team === team && p.id === id);
         if (idx !== -1) {
             if (roomState.registeredOwners[idx].userToken === userToken) {
@@ -109,7 +103,6 @@ io.on('connection', (socket) => {
                 io.emit('onRegisterOwner', roomState.registeredOwners[idx]);
             }
         } else {
-            // 완전히 비어있는 자리인 경우 등록
             const newOwner = {
                 team: team,
                 id: id,
@@ -124,7 +117,7 @@ io.on('connection', (socket) => {
         }
     });
 
-    // 새로고침 유저가 소켓만 재연결되었을 때 기존 선수 데이터를 복구하기 위한 핸들러
+    // 새로고침 유저 소켓 재연결 핸들러
     socket.on('reconnectPlayer', (data) => {
         const { userToken } = data;
         const found = roomState.registeredOwners.find(p => p.userToken === userToken);
@@ -151,7 +144,7 @@ io.on('connection', (socket) => {
         roomState.teamRedName = data.teamRedName;
         roomState.maxBluePlayers = data.maxBluePlayers;
         roomState.maxRedPlayers = data.maxRedPlayers;
-        roomState.globalDefenseLockUntil = 0; // 전역 쿨타임 초기화
+        roomState.globalDefenseLockUntil = 0; 
         io.emit('onStartGame', data);
         addServerLog(`[경기 시작] 매치가 시작되었습니다! 현재 스코어 [${roomState.scoreBlue}:${roomState.scoreRed}]`);
     });
@@ -212,24 +205,23 @@ io.on('connection', (socket) => {
         io.emit('onClearLogs');
     });
 
-    // 디펜스 미니게임 시작 브로드캐스트 (글로벌 쿨타임 지정 포함)
+    // 디펜스 미니게임 시작 브로드캐스트
     socket.on('syncStartMiniGame', (data) => {
         roomState.gameState = "MINIGAME";
-        // 디펜스가 시작되는 시점에 전역 쿨타임 3초(3000ms) 적용 예약 설정은 미니게임이 끝난 후부터 흐르도록 설정
         io.emit('onStartMiniGame', data);
     });
 
-    // 미니게임 실시간 게이지 변동 동기화
+    // 미니게임 실시간 연타 클릭 동기화
     socket.on('syncMiniGameHit', (gauge) => {
         socket.broadcast.emit('onMiniGameGauge', gauge);
     });
 
-    // 미니게임 완료 동기화 및 3초 전역 쿨타임 시작 타임스탬프 발행
+    // 미니게임 완료 동기화 및 5초 전역 쿨타임 지정
     socket.on('syncEndMiniGame', (data) => {
         roomState.gameState = "PLAYING";
         
-        // 미니게임 종료 버튼 클릭/종료 후 시점부터 3초간 전역 디펜스 금지
-        const lockDuration = 3000; 
+        // 디펜스 종료 시점부터 5초(5000ms)간 전역 디펜스 금지
+        const lockDuration = 5000; 
         roomState.globalDefenseLockUntil = Date.now() + lockDuration;
 
         if (data.isDefWin) {
@@ -238,7 +230,6 @@ io.on('connection', (socket) => {
             addServerLog(`[디펜스 실패] 공격수(ID: ${data.attTeam} ${data.attId}번)가 수비를 제치고 돌파하여 공을 지켜냈습니다!`, "defense");
         }
         
-        // 종료 정보와 함께 전역 쿨타임 적용 종료 타임스탬프를 클라이언트에 전달
         data.globalDefenseLockUntil = roomState.globalDefenseLockUntil;
         io.emit('onEndMiniGame', data);
     });
@@ -250,7 +241,7 @@ io.on('connection', (socket) => {
     });
 
     socket.on('disconnect', () => {
-        // 새로고침 시 데이터를 파괴하지 않고 상태를 고스란히 보존합니다.
+        // 새로고침 시 데이터 보존
     });
 });
 

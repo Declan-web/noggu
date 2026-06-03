@@ -224,6 +224,7 @@
             width: 50%;
             height: 100%;
             background: linear-gradient(90deg, #3498db, #e74c3c);
+            transition: width 0.05s linear;
         }
         #ui {
             margin-top: 15px;
@@ -259,6 +260,39 @@
             border-radius: 4px;
             border: 1px solid #666;
             font-size: 13px;
+        }
+
+        /* 신규 추가: 화면 하단 글로벌 디펜스 쿨타임 안내 UI */
+        #globalCooldownBarZone {
+            margin-top: 15px;
+            width: 400px;
+            background: rgba(0, 0, 0, 0.6);
+            border: 1px solid #666;
+            padding: 8px 12px;
+            border-radius: 6px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 5px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+        }
+        #cooldownTitle {
+            font-size: 12px;
+            font-weight: bold;
+            color: #2ecc71;
+        }
+        .cooldown-progress-container {
+            width: 100%;
+            height: 12px;
+            background-color: #333;
+            border-radius: 6px;
+            overflow: hidden;
+            border: 1px solid #555;
+        }
+        #cooldownProgressFiller {
+            width: 0%;
+            height: 100%;
+            background: #2ecc71;
         }
     </style>
     <script src="/socket.io/socket.io.js"></script>
@@ -312,14 +346,14 @@
                 <div class="key-row"><span>패스</span><span class="key-val">Shift</span></div>
                 <div class="key-row"><span>슛</span><span class="key-val">Space</span></div>
                 <div class="key-row"><span>디펜스 시도</span><span class="key-val">좌클릭</span></div>
-                <div class="key-row"><span>디펜스 미니게임</span><span class="key-val">우클릭 연타</span></div>
+                <div class="key-row"><span>디펜스 게임</span><span class="key-val">우클릭 유지</span></div>
             </div>
         </div>
 
         <div id="gameContainer">
             <div id="cutIn">디펜스!!</div>
             <div id="miniGameUI">
-                <div id="miniGameTitle" style="font-weight:bold; font-size:16px;">🔥 마우스 우클릭을 연타하세요! 🔥</div>
+                <div id="miniGameTitle" style="font-weight:bold; font-size:16px;">🔥 마우스 우클릭을 꾹 누르고 계세요! 🔥</div>
                 <div class="progress-bar">
                     <div id="progress"></div>
                 </div>
@@ -343,10 +377,16 @@
         <div style="color: #e74c3c;"><span id="teamLabel2">TEAM RED</span>: <span id="score2">0</span></div>
     </div>
 
+    <div id="globalCooldownBarZone">
+        <div id="cooldownTitle">디펜스 가능 시스템 온 (READY)</div>
+        <div class="cooldown-progress-container">
+            <div id="cooldownProgressFiller"></div>
+        </div>
+    </div>
+
 <script>
 const socket = io();
 
-// 브라우저 세션 식별 고유 토큰 생성 및 획득 (새로고침 판별용)
 let myUserToken = localStorage.getItem("basketball_user_token");
 if (!myUserToken) {
     myUserToken = "tk_" + Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
@@ -367,6 +407,10 @@ const chatInputZone = document.getElementById("chatInputZone");
 const maxBlueInput = document.getElementById("maxBlueInput");
 const maxRedInput = document.getElementById("maxRedInput");
 
+// 글로벌 디펜스 게이지 용 자바스크립트 변수 바인딩
+const cooldownTitle = document.getElementById("cooldownTitle");
+const cooldownProgressFiller = document.getElementById("cooldownProgressFiller");
+
 let isReferee = false; 
 let myDirectorName = ""; 
 
@@ -384,7 +428,9 @@ let miniGameTimer = 0;
 let activeDefender = null;
 let activeAttacker = null;
 
-let defenseLockUntil = 0;
+// 서버와 동기화되는 전역 디펜스 쿨타임 타임스탬프 (모든 유저 공유)
+let globalDefenseLockUntil = 0; 
+let rightButtonHolding = false; // 현재 내가 우클릭을 누르고 있는지 여부
 
 let myControllingPlayer = null; 
 let keys = {};
@@ -425,9 +471,6 @@ class Player {
         this.socketId = null;
         this.userToken = null; 
         this.angle = team === "BLUE" ? 0 : Math.PI; 
-
-        this.lastDefenseTime = 0; 
-        this.defenseCooldown = 3000; 
         this.skillLevel = 5.0;
     }
 
@@ -437,14 +480,11 @@ class Player {
             if (this.team === "RED" && this.id > maxRedPlayers) return;
         }
 
-        const now = Date.now();
-        const timePassed = now - this.lastDefenseTime;
-        const isCooling = timePassed < this.defenseCooldown;
         const isMe = (myControllingPlayer && myControllingPlayer.team === this.team && myControllingPlayer.id === this.id);
 
         ctx.save();
         if (this.ownerName) {
-            ctx.strokeStyle = isCooling ? "rgba(180, 180, 180, 0.4)" : "rgba(255, 242, 0, 0.75)";
+            ctx.strokeStyle = "rgba(255, 242, 0, 0.75)";
             ctx.lineWidth = 2.5;
             ctx.setLineDash([4, 4]);
             ctx.beginPath();
@@ -484,13 +524,6 @@ class Player {
             ctx.fillStyle = isMe ? "#fff" : "#bbbbbb";
             ctx.font = isMe ? "bold 12px sans-serif" : "bold 11px sans-serif";
             ctx.fillText(`${this.ownerName} [${this.skillLevel.toFixed(1)}v]`, this.x, this.y - this.radius - 8);
-
-            if (isCooling && gameState !== "PAUSE") {
-                const remaining = Math.ceil((this.defenseCooldown - timePassed) / 1000);
-                ctx.fillStyle = "#ff4d4d";
-                ctx.font = "9px sans-serif";
-                ctx.fillText(`${remaining}s`, this.x, this.y + this.radius + 12);
-            }
         }
     }
 
@@ -693,7 +726,6 @@ function buildActivePlayersPool(preserveNames = true) {
         activePlayers.push(p);
     }
 
-    // 세션 토큰 기반 내 제어 캐릭터 복사 검증성 강화
     const findMySlot = activePlayers.find(p => p.userToken === myUserToken);
     if (findMySlot) {
         myControllingPlayer = findMySlot;
@@ -713,7 +745,6 @@ function sendMatchCapacity() {
 
     maxBlueInput.value = bMax;
     maxRedInput.value = rMax;
-
     maxBluePlayers = bMax;
     maxRedPlayers = rMax;
 
@@ -764,7 +795,6 @@ function authReferee() {
         alert("감독 이름을 입력해 주세요!");
         return;
     }
-    // [수정] 감독 비밀번호를 483010으로 매핑 변경
     if (inputKey === "483010") {
         socket.emit("syncRegisterDirector", { name: inputName, token: myUserToken });
     } else {
@@ -806,7 +836,7 @@ function startGame() {
 function triggerManualReset() {
     if (!isReferee) return;
     resetBtn.blur();
-    if(confirm("정말로 전체 경기를 처음 상태로 완전히 초기화하시겠습니까? (감독 직위, 캐릭터 선택 및 모든 데이터 소멸)")) {
+    if(confirm("정말로 전체 경기를 처음 상태로 완전히 초기화하시겠습니까?")) {
         socket.emit("syncResetMatch");
     }
 }
@@ -868,32 +898,23 @@ function appendLogToUI(log) {
 
 document.getElementById("gameContainer").addEventListener("contextmenu", e => { e.preventDefault(); });
 
+// 마우스 우클릭 누름/뗌 이벤트 추가 감지
 canvas.addEventListener("mousedown", e => {
     canvas.focus(); 
+    
+    // 미니게임 진행 중 우클릭 입력 등록 처리
     if (gameState === "MINIGAME" && e.button === 2) {
         e.preventDefault();
-        if (myControllingPlayer) {
-            const p = myControllingPlayer;
-            if (activeDefender && p.team === activeDefender.team && p.id === activeDefender.id) {
-                miniGameGauge -= 4;
-                if (miniGameGauge < 0) miniGameGauge = 0;
-                socket.emit("syncMiniGameHit", miniGameGauge);
-            } else if (activeAttacker && p.team === activeAttacker.team && p.id === activeAttacker.id) {
-                miniGameGauge += 4;
-                if (miniGameGauge > 100) miniGameGauge = 100;
-                socket.emit("syncMiniGameHit", miniGameGauge);
-            }
-        }
+        rightButtonHolding = true;
         return;
     }
+
     if (e.button === 0) {
         const rect = canvas.getBoundingClientRect();
         const mouseX = e.clientX - rect.left;
         const mouseY = e.clientY - rect.top;
         
-        // 경기 중(PLAYING) 혹은 셋업창 상관 없이 내 토큰 링크 선점 유지 확인 가능
         if ((gameState === "SETUP" || gameState === "PLAYING") && myControllingPlayer) {
-            // 마우스 클릭 위치에 디펜스 로직 연결 처리
             if (gameState === "PLAYING") checkDefenseTrigger(myControllingPlayer);
             return;
         }
@@ -912,7 +933,7 @@ canvas.addEventListener("mousedown", e => {
                             }
                             p.ownerName = trimmedName;
                             p.socketId = socket.id;
-                            p.userToken = myUserToken; // 내 고유 토큰 주입
+                            p.userToken = myUserToken; 
                             myControllingPlayer = p;
                             registeredNames.add(trimmedName);
                             socket.emit("syncRegisterOwner", { team: p.team, id: p.id, ownerName: trimmedName, userToken: myUserToken });
@@ -923,9 +944,14 @@ canvas.addEventListener("mousedown", e => {
                     }
                 }
             });
-        } else if (gameState === "PLAYING" && myControllingPlayer) {
-            checkDefenseTrigger(myControllingPlayer);
         }
+    }
+});
+
+// 마우스에서 손을 떼었을 때 감지
+window.addEventListener("mouseup", e => {
+    if (e.button === 2) {
+        rightButtonHolding = false;
     }
 });
 
@@ -968,20 +994,21 @@ function checkManualBallGrab(player) {
     }
 }
 
+// [수정] 디펜스 진입 발동 조건 제어 (전역 쿨타임 시스템 검증 반영)
 function checkDefenseTrigger(player) {
     if (gameState !== "PLAYING" || !ball.holder || ball.holder.team === player.team) return;
-    const now = Date.now();
-    if (now < player.lastDefenseTime + player.defenseCooldown) return;
-    if (now < defenseLockUntil) return;
+    
+    // 글로벌 디펜스 쿨타임이 아직 남아있다면 어느 선수도 디펜스 시도 불가
+    if (Date.now() < globalDefenseLockUntil) return;
 
     const target = ball.holder;
     const dist = Math.hypot(player.x - target.x, player.y - target.y);
     if (dist < player.radius + target.radius + 28) {
-        player.lastDefenseTime = now;
         activeDefender = player;
         activeAttacker = target;
         miniGameGauge = 50;
-        miniGameTimer = 5.0;
+        miniGameTimer = 5.0; // 미니게임 제한시간 5초
+        rightButtonHolding = false; // 마우스 상태 초기화
         gameState = "MINIGAME";
 
         socket.emit("syncStartMiniGame", {
@@ -994,6 +1021,33 @@ function checkDefenseTrigger(player) {
 function gameLoop(currentTime) {
     const dt = (currentTime - lastTime) / 1000;
     lastTime = currentTime;
+
+    // 실시간 하단 전역 디펜스 쿨타임 바 안내 시각화 갱신 로직
+    if (gameState === "PLAYING") {
+        const now = Date.now();
+        if (now < globalDefenseLockUntil) {
+            const timeLeft = globalDefenseLockUntil - now;
+            const pct = (timeLeft / 3000) * 100;
+            cooldownTitle.innerText = `⚠️ 전역 디펜스 과부하 방지 쿨타임 진행 중! (${(timeLeft/1000).toFixed(1)}초)`;
+            cooldownTitle.style.color = "#e74c3c";
+            cooldownProgressFiller.style.backgroundColor = "#e74c3c";
+            cooldownProgressFiller.style.width = `${pct}%`;
+        } else {
+            cooldownTitle.innerText = "디펜스 가능 시스템 온 (READY)";
+            cooldownTitle.style.color = "#2ecc71";
+            cooldownProgressFiller.style.backgroundColor = "#2ecc71";
+            cooldownProgressFiller.style.width = "100%";
+        }
+    } else {
+        cooldownProgressFiller.style.width = "0%";
+        if (gameState === "MINIGAME") {
+            cooldownTitle.innerText = "⚡ 디펜스 대치 경합이 펼쳐지는 중입니다! ⚡";
+            cooldownTitle.style.color = "#f1c40f";
+        } else {
+            cooldownTitle.innerText = "경기 대기 중";
+            cooldownTitle.style.color = "#aaa";
+        }
+    }
 
     if (gameState === "PLAYING") {
         if (myControllingPlayer) {
@@ -1018,21 +1072,42 @@ function gameLoop(currentTime) {
         }
         ball.update(dt);
     }
-    else if (gameState === "MINIGAME" && isReferee) {
-        miniGameTimer -= dt;
-        if (miniGameTimer <= 0) {
-            let isDefWin = miniGameGauge < 50; 
-            if (miniGameGauge === 50) isDefWin = Math.random() < 0.5;
-            
-            gameState = "PLAYING";
-            if (isDefWin) {
-                ball.holder = activeDefender;
-                socket.emit("syncEndMiniGame", { isDefWin: true, defTeam: activeDefender.team, defId: activeDefender.id, holderTeam: activeDefender.team, holderId: activeDefender.id });
-            } else {
-                ball.holder = activeAttacker;
-                socket.emit("syncEndMiniGame", { isDefWin: false, attTeam: activeAttacker.team, attId: activeAttacker.id, holderTeam: activeAttacker.team, holderId: activeAttacker.id });
+    // [핵심 수정] 마우스 우클릭 유지 누적 계산 및 심판 소켓 기반 제한시간 판정 처리
+    else if (gameState === "MINIGAME") {
+        // 미니게임에 직접 참여 중인 클라이언트가 우클릭을 꾹 누르고 있으면 실시간으로 게이지 변동 반영 및 패킷 발송
+        if (myControllingPlayer) {
+            const p = myControllingPlayer;
+            if (activeDefender && p.team === activeDefender.team && p.id === activeDefender.id && rightButtonHolding) {
+                // 수비수가 누르고 있으면 게이지를 왼쪽(0에 가깝게)으로 깎음 (초당 약 15% 속도)
+                miniGameGauge -= 15 * dt;
+                if (miniGameGauge < 0) miniGameGauge = 0;
+                socket.emit("syncMiniGameHit", miniGameGauge);
+            } 
+            else if (activeAttacker && p.team === activeAttacker.team && p.id === activeAttacker.id && rightButtonHolding) {
+                // 공격수가 누르고 있으면 게이지를 오른쪽(100에 가깝게)으로 채움
+                miniGameGauge += 15 * dt;
+                if (miniGameGauge > 100) miniGameGauge = 100;
+                socket.emit("syncMiniGameHit", miniGameGauge);
             }
-            defenseLockUntil = Date.now() + 2000;
+        }
+
+        // 오직 심판(방장)의 루프에서만 공정하게 제한시간 타이머 차감 및 최종 승패 연산 수행
+        if (isReferee) {
+            miniGameTimer -= dt;
+            if (miniGameTimer <= 0) {
+                // 제한시간 종료 시 게이지 수치가 50 미만이면 수비(스틸) 성공, 50 초과면 공격(돌파) 성공
+                let isDefWin = miniGameGauge < 50; 
+                if (Math.abs(miniGameGauge - 50) < 0.01) isDefWin = Math.random() < 0.5;
+                
+                gameState = "PLAYING";
+                if (isDefWin) {
+                    ball.holder = activeDefender;
+                    socket.emit("syncEndMiniGame", { isDefWin: true, defTeam: activeDefender.team, defId: activeDefender.id, holderTeam: activeDefender.team, holderId: activeDefender.id });
+                } else {
+                    ball.holder = activeAttacker;
+                    socket.emit("syncEndMiniGame", { isDefWin: false, attTeam: activeAttacker.team, attId: activeAttacker.id, holderTeam: activeAttacker.team, holderId: activeAttacker.id });
+                }
+            }
         }
     }
 
@@ -1085,6 +1160,7 @@ function drawCourt() {
 function startMiniGameUI(data) {
     gameState = "MINIGAME";
     miniGameGauge = 50;
+    rightButtonHolding = false;
     activeDefender = activePlayers.find(p => p.team === data.defTeam && p.id === data.defId);
     activeAttacker = activePlayers.find(p => p.team === data.attTeam && p.id === data.attId);
 
@@ -1103,6 +1179,7 @@ function startMiniGameUI(data) {
 function endMiniGame(resultData) {
     gameState = "PLAYING";
     miniGameUI.style.display = "none";
+    rightButtonHolding = false;
 
     if (resultData.holderId) {
         ball.holder = activePlayers.find(p => p.team === resultData.holderTeam && p.id === resultData.holderId);
@@ -1110,10 +1187,14 @@ function endMiniGame(resultData) {
         ball.holder = null;
     }
 
+    // 서버가 발행한 3초 글로벌 쿨타임 적용 동기화
+    if (resultData.globalDefenseLockUntil) {
+        globalDefenseLockUntil = resultData.globalDefenseLockUntil;
+    }
+
     cutIn.innerText = resultData.isDefWin ? "스틸 성공!!" : "돌파 성공!!";
     cutIn.classList.add("active");
     setTimeout(() => { cutIn.classList.remove("active"); }, 900);
-    defenseLockUntil = Date.now() + 2000;
 }
 
 socket.on("onInitRoomState", (state) => {
@@ -1134,9 +1215,13 @@ socket.on("onInitRoomState", (state) => {
     document.getElementById("teamLabel1").innerText = teamBlueName;
     document.getElementById("teamLabel2").innerText = teamRedName;
 
+    // 전역 쿨타임 백업 상태 동기화
+    if (state.globalDefenseLockUntil) {
+        globalDefenseLockUntil = state.globalDefenseLockUntil;
+    }
+
     buildActivePlayersPool(true);
 
-    // 저장된 매칭방 유저 매핑 동기화
     state.registeredOwners.forEach(data => {
         const p = activePlayers.find(o => o.team === data.team && o.id === data.id);
         if (p) {
@@ -1146,10 +1231,8 @@ socket.on("onInitRoomState", (state) => {
             p.skillLevel = data.skillLevel;
             registeredNames.add(data.ownerName);
             
-            // 만약 새로고침한 내 토큰정보와 저장된 토큰이 일치하면 컨트롤 복구
             if (data.userToken === myUserToken) {
                 myControllingPlayer = p;
-                // 서버에 내 소켓 아이디 바뀐 점 자동 알림
                 socket.emit("reconnectPlayer", { userToken: myUserToken });
             }
         }
@@ -1159,7 +1242,6 @@ socket.on("onInitRoomState", (state) => {
     logContainer.innerHTML = "";
     state.logs.forEach(log => appendLogToUI(log));
 
-    // 감독 권한 복구용 로직 개편
     if (state.directorName) {
         if (state.directorToken === myUserToken) {
             isReferee = true;
@@ -1170,7 +1252,6 @@ socket.on("onInitRoomState", (state) => {
             chatInputZone.style.display = "flex";
             document.getElementById("teamNameBlueInput").disabled = false;
             document.getElementById("teamNameRedInput").disabled = false;
-            // 새로고침으로 끊어진 소켓 재연결 바인딩
             socket.emit("syncRegisterDirector", { name: myDirectorName, token: myUserToken });
         } else {
             document.getElementById("statusText").innerText = `[관전자 모드] 감독 ${state.directorName}님이 방을 관리 중입니다.`;
@@ -1238,7 +1319,6 @@ socket.on("onRegisterOwner", (data) => {
             p.userToken = data.userToken || null;
             registeredNames.add(data.ownerName);
             
-            // 나 자신이 재선점/재매핑 완료되었는지 체크
             if (data.userToken === myUserToken) {
                 myControllingPlayer = p;
             }
@@ -1306,6 +1386,7 @@ socket.on("onStartGame", (data) => {
     teamRedName = data.teamRedName;
     maxBluePlayers = data.maxBluePlayers;
     maxRedPlayers = data.maxRedPlayers;
+    globalDefenseLockUntil = 0; 
     buildActivePlayersPool(true);
     toggleUIVisibility();
 });
@@ -1315,7 +1396,6 @@ socket.on("onGameStateChange", (data) => {
     toggleUIVisibility();
 });
 
-// 완전 초기화 리셋 처리 (클라이언트 로컬 변수 완전 초기화)
 socket.on("onResetMatch", () => {
     gameState = "SETUP";
     scoreBlue = 0;
@@ -1326,6 +1406,8 @@ socket.on("onResetMatch", () => {
     myControllingPlayer = null;
     isReferee = false;
     myDirectorName = "";
+    globalDefenseLockUntil = 0;
+    rightButtonHolding = false;
     registeredNames.clear();
 
     buildActivePlayersPool(false);

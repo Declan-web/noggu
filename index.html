@@ -262,7 +262,7 @@
             font-size: 13px;
         }
 
-        /* 신규 추가: 화면 하단 글로벌 디펜스 쿨타임 안내 UI */
+        /* 디펜스 쿨타임 바 안내 UI - 기본 상태 숨김(display: none) */
         #globalCooldownBarZone {
             margin-top: 15px;
             width: 400px;
@@ -270,7 +270,7 @@
             border: 1px solid #666;
             padding: 8px 12px;
             border-radius: 6px;
-            display: flex;
+            display: none;
             flex-direction: column;
             align-items: center;
             gap: 5px;
@@ -279,7 +279,7 @@
         #cooldownTitle {
             font-size: 12px;
             font-weight: bold;
-            color: #2ecc71;
+            color: #e74c3c;
         }
         .cooldown-progress-container {
             width: 100%;
@@ -292,7 +292,7 @@
         #cooldownProgressFiller {
             width: 0%;
             height: 100%;
-            background: #2ecc71;
+            background: #e74c3c;
         }
     </style>
     <script src="/socket.io/socket.io.js"></script>
@@ -346,14 +346,14 @@
                 <div class="key-row"><span>패스</span><span class="key-val">Shift</span></div>
                 <div class="key-row"><span>슛</span><span class="key-val">Space</span></div>
                 <div class="key-row"><span>디펜스 시도</span><span class="key-val">좌클릭</span></div>
-                <div class="key-row"><span>디펜스 게임</span><span class="key-val">우클릭 유지</span></div>
+                <div class="key-row"><span>디펜스 게임</span><span class="key-val">우클릭 연타</span></div>
             </div>
         </div>
 
         <div id="gameContainer">
             <div id="cutIn">디펜스!!</div>
             <div id="miniGameUI">
-                <div id="miniGameTitle" style="font-weight:bold; font-size:16px;">🔥 마우스 우클릭을 꾹 누르고 계세요! 🔥</div>
+                <div id="miniGameTitle" style="font-weight:bold; font-size:16px;">🔥 마우스 우클릭을 마구 연타하세요!! 🔥</div>
                 <div class="progress-bar">
                     <div id="progress"></div>
                 </div>
@@ -378,7 +378,7 @@
     </div>
 
     <div id="globalCooldownBarZone">
-        <div id="cooldownTitle">디펜스 가능 시스템 온 (READY)</div>
+        <div id="cooldownTitle">⚠️ 디펜스 쿨타임 진행 중!</div>
         <div class="cooldown-progress-container">
             <div id="cooldownProgressFiller"></div>
         </div>
@@ -407,7 +407,8 @@ const chatInputZone = document.getElementById("chatInputZone");
 const maxBlueInput = document.getElementById("maxBlueInput");
 const maxRedInput = document.getElementById("maxRedInput");
 
-// 글로벌 디펜스 게이지 용 자바스크립트 변수 바인딩
+// 글로벌 디펜스 게이지용 DOM
+const globalCooldownBarZone = document.getElementById("globalCooldownBarZone");
 const cooldownTitle = document.getElementById("cooldownTitle");
 const cooldownProgressFiller = document.getElementById("cooldownProgressFiller");
 
@@ -428,9 +429,7 @@ let miniGameTimer = 0;
 let activeDefender = null;
 let activeAttacker = null;
 
-// 서버와 동기화되는 전역 디펜스 쿨타임 타임스탬프 (모든 유저 공유)
 let globalDefenseLockUntil = 0; 
-let rightButtonHolding = false; // 현재 내가 우클릭을 누르고 있는지 여부
 
 let myControllingPlayer = null; 
 let keys = {};
@@ -463,10 +462,8 @@ class Player {
         this.id = id;
         this.spawnIndex = spawnIndex;
         this.radius = 16;
-        
         this.baseSpeed = 210;
         this.color = team === "BLUE" ? "#3498db" : "#e74c3c";
-        
         this.ownerName = null;     
         this.socketId = null;
         this.userToken = null; 
@@ -898,14 +895,28 @@ function appendLogToUI(log) {
 
 document.getElementById("gameContainer").addEventListener("contextmenu", e => { e.preventDefault(); });
 
-// 마우스 우클릭 누름/뗌 이벤트 추가 감지
+// [수정] 마우스 우클릭을 클릭할 때마다 연타 반영되도록 mousedown 수정
 canvas.addEventListener("mousedown", e => {
     canvas.focus(); 
     
-    // 미니게임 진행 중 우클릭 입력 등록 처리
+    // 미니게임 상태에서 마우스 우클릭 연타 입력 처리
     if (gameState === "MINIGAME" && e.button === 2) {
         e.preventDefault();
-        rightButtonHolding = true;
+        if (myControllingPlayer) {
+            const p = myControllingPlayer;
+            if (activeDefender && p.team === activeDefender.team && p.id === activeDefender.id) {
+                // 수비수가 연타하면 게이지를 왼쪽(0)으로 밀어붙임 (클릭당 2.5% 전진)
+                miniGameGauge -= 2.5;
+                if (miniGameGauge < 0) miniGameGauge = 0;
+                socket.emit("syncMiniGameHit", miniGameGauge);
+            } 
+            else if (activeAttacker && p.team === activeAttacker.team && p.id === activeAttacker.id) {
+                // 공격수가 연타하면 게이지를 오른쪽(100)으로 밀어붙임
+                miniGameGauge += 2.5;
+                if (miniGameGauge > 100) miniGameGauge = 100;
+                socket.emit("syncMiniGameHit", miniGameGauge);
+            }
+        }
         return;
     }
 
@@ -948,13 +959,6 @@ canvas.addEventListener("mousedown", e => {
     }
 });
 
-// 마우스에서 손을 떼었을 때 감지
-window.addEventListener("mouseup", e => {
-    if (e.button === 2) {
-        rightButtonHolding = false;
-    }
-});
-
 window.addEventListener("keydown", e => {
     if (document.activeElement === document.getElementById("directorChatMsg")) {
         return;
@@ -994,11 +998,10 @@ function checkManualBallGrab(player) {
     }
 }
 
-// [수정] 디펜스 진입 발동 조건 제어 (전역 쿨타임 시스템 검증 반영)
 function checkDefenseTrigger(player) {
     if (gameState !== "PLAYING" || !ball.holder || ball.holder.team === player.team) return;
     
-    // 글로벌 디펜스 쿨타임이 아직 남아있다면 어느 선수도 디펜스 시도 불가
+    // 글로벌 디펜스 쿨타임이 진행 중이면 디펜스 진입 불가
     if (Date.now() < globalDefenseLockUntil) return;
 
     const target = ball.holder;
@@ -1007,8 +1010,7 @@ function checkDefenseTrigger(player) {
         activeDefender = player;
         activeAttacker = target;
         miniGameGauge = 50;
-        miniGameTimer = 5.0; // 미니게임 제한시간 5초
-        rightButtonHolding = false; // 마우스 상태 초기화
+        miniGameTimer = 5.0; // 미니게임 제한시간 5초 유지
         gameState = "MINIGAME";
 
         socket.emit("syncStartMiniGame", {
@@ -1022,31 +1024,23 @@ function gameLoop(currentTime) {
     const dt = (currentTime - lastTime) / 1000;
     lastTime = currentTime;
 
-    // 실시간 하단 전역 디펜스 쿨타임 바 안내 시각화 갱신 로직
+    // [수정] 하단 전역 디펜스 쿨타임 바 안내 유동 활성화/비활성화 처리
     if (gameState === "PLAYING") {
         const now = Date.now();
         if (now < globalDefenseLockUntil) {
+            // 디펜스가 끝나고 쿨타임이 도는 5초 동안만 화면에 잠깐 표시
+            globalCooldownBarZone.style.display = "flex";
             const timeLeft = globalDefenseLockUntil - now;
-            const pct = (timeLeft / 3000) * 100;
-            cooldownTitle.innerText = `⚠️ 전역 디펜스 과부하 방지 쿨타임 진행 중! (${(timeLeft/1000).toFixed(1)}초)`;
-            cooldownTitle.style.color = "#e74c3c";
-            cooldownProgressFiller.style.backgroundColor = "#e74c3c";
+            const pct = (timeLeft / 5000) * 100; // 5초 기준 계산
+            cooldownTitle.innerText = `⚠️ 디펜스 시스템 과부하 방지 쿨타임 (남은 시간: ${(timeLeft/1000).toFixed(1)}초)`;
             cooldownProgressFiller.style.width = `${pct}%`;
         } else {
-            cooldownTitle.innerText = "디펜스 가능 시스템 온 (READY)";
-            cooldownTitle.style.color = "#2ecc71";
-            cooldownProgressFiller.style.backgroundColor = "#2ecc71";
-            cooldownProgressFiller.style.width = "100%";
+            // 쿨타임 5초가 다 지나면 흔적 없이 숨김
+            globalCooldownBarZone.style.display = "none";
         }
     } else {
-        cooldownProgressFiller.style.width = "0%";
-        if (gameState === "MINIGAME") {
-            cooldownTitle.innerText = "⚡ 디펜스 대치 경합이 펼쳐지는 중입니다! ⚡";
-            cooldownTitle.style.color = "#f1c40f";
-        } else {
-            cooldownTitle.innerText = "경기 대기 중";
-            cooldownTitle.style.color = "#aaa";
-        }
+        // 미니게임 진행 중이거나 SETUP 상황에서도 쿨타임 바는 숨김
+        globalCooldownBarZone.style.display = "none";
     }
 
     if (gameState === "PLAYING") {
@@ -1072,30 +1066,12 @@ function gameLoop(currentTime) {
         }
         ball.update(dt);
     }
-    // [핵심 수정] 마우스 우클릭 유지 누적 계산 및 심판 소켓 기반 제한시간 판정 처리
     else if (gameState === "MINIGAME") {
-        // 미니게임에 직접 참여 중인 클라이언트가 우클릭을 꾹 누르고 있으면 실시간으로 게이지 변동 반영 및 패킷 발송
-        if (myControllingPlayer) {
-            const p = myControllingPlayer;
-            if (activeDefender && p.team === activeDefender.team && p.id === activeDefender.id && rightButtonHolding) {
-                // 수비수가 누르고 있으면 게이지를 왼쪽(0에 가깝게)으로 깎음 (초당 약 15% 속도)
-                miniGameGauge -= 15 * dt;
-                if (miniGameGauge < 0) miniGameGauge = 0;
-                socket.emit("syncMiniGameHit", miniGameGauge);
-            } 
-            else if (activeAttacker && p.team === activeAttacker.team && p.id === activeAttacker.id && rightButtonHolding) {
-                // 공격수가 누르고 있으면 게이지를 오른쪽(100에 가깝게)으로 채움
-                miniGameGauge += 15 * dt;
-                if (miniGameGauge > 100) miniGameGauge = 100;
-                socket.emit("syncMiniGameHit", miniGameGauge);
-            }
-        }
-
-        // 오직 심판(방장)의 루프에서만 공정하게 제한시간 타이머 차감 및 최종 승패 연산 수행
+        // 오직 심판(방장)의 소켓 루프에서만 공정하게 제한시간 타이머 차감 및 최종 승패 연산 수행
         if (isReferee) {
             miniGameTimer -= dt;
             if (miniGameTimer <= 0) {
-                // 제한시간 종료 시 게이지 수치가 50 미만이면 수비(스틸) 성공, 50 초과면 공격(돌파) 성공
+                // 5초 종료 시 게이지 수치가 50 미만이면 수비 성공, 50 초과면 공격 성공
                 let isDefWin = miniGameGauge < 50; 
                 if (Math.abs(miniGameGauge - 50) < 0.01) isDefWin = Math.random() < 0.5;
                 
@@ -1160,7 +1136,6 @@ function drawCourt() {
 function startMiniGameUI(data) {
     gameState = "MINIGAME";
     miniGameGauge = 50;
-    rightButtonHolding = false;
     activeDefender = activePlayers.find(p => p.team === data.defTeam && p.id === data.defId);
     activeAttacker = activePlayers.find(p => p.team === data.attTeam && p.id === data.attId);
 
@@ -1179,7 +1154,6 @@ function startMiniGameUI(data) {
 function endMiniGame(resultData) {
     gameState = "PLAYING";
     miniGameUI.style.display = "none";
-    rightButtonHolding = false;
 
     if (resultData.holderId) {
         ball.holder = activePlayers.find(p => p.team === resultData.holderTeam && p.id === resultData.holderId);
@@ -1187,7 +1161,7 @@ function endMiniGame(resultData) {
         ball.holder = null;
     }
 
-    // 서버가 발행한 3초 글로벌 쿨타임 적용 동기화
+    // 서버가 발행한 5초 글로벌 쿨타임 적용 동기화
     if (resultData.globalDefenseLockUntil) {
         globalDefenseLockUntil = resultData.globalDefenseLockUntil;
     }
@@ -1215,7 +1189,6 @@ socket.on("onInitRoomState", (state) => {
     document.getElementById("teamLabel1").innerText = teamBlueName;
     document.getElementById("teamLabel2").innerText = teamRedName;
 
-    // 전역 쿨타임 백업 상태 동기화
     if (state.globalDefenseLockUntil) {
         globalDefenseLockUntil = state.globalDefenseLockUntil;
     }
@@ -1407,7 +1380,6 @@ socket.on("onResetMatch", () => {
     isReferee = false;
     myDirectorName = "";
     globalDefenseLockUntil = 0;
-    rightButtonHolding = false;
     registeredNames.clear();
 
     buildActivePlayersPool(false);

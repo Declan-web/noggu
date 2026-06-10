@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>다들 모여!</title>
     <style>
         body {
@@ -13,12 +13,18 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: center;
-            height: 100vh;
-            overflow: hidden;
+            justify-content: flex-start;
+            min-height: 100vh;
+            overflow-x: hidden;
+            overflow-y: auto;
+            padding-bottom: 20px;
+            box-sizing: border-box;
+            -webkit-user-select: none;
+            user-select: none;
         }
         
         #lobby {
+            margin-top: 10px;
             margin-bottom: 15px;
             display: flex;
             gap: 12px;
@@ -29,6 +35,10 @@
             border: 1px solid #555;
             flex-wrap: wrap;
             z-index: 20;
+            justify-content: center;
+            width: 95%;
+            max-width: 1400px;
+            box-sizing: border-box;
         }
         select, button, input {
             padding: 8px 12px;
@@ -66,6 +76,7 @@
             background-color: #f39c12;
             color: #fff;
             cursor: pointer;
+            touch-action: manipulation;
         }
         button:hover {
             background-color: #d35400;
@@ -83,8 +94,9 @@
             justify-content: center;
             width: 100%;
             max-width: 1780px; 
-            padding: 0 20px;
+            padding: 0 10px;
             box-sizing: border-box;
+            flex-wrap: wrap;
         }
 
         .side-panel {
@@ -100,14 +112,21 @@
         }
 
         .side-panel.log-panel {
-            width: 480px;
+            width: 440px;
+        }
+
+        @media (max-width: 1024px) {
+            .side-panel { width: 100% !important; height: 200px !important; }
+            .side-panel.log-panel { height: 250px !important; }
+            #gameContainer { order: -1; width: 100%; overflow-x: auto; display: flex; justify-content: center; }
+            canvas { min-width: 1000px; }
         }
 
         .panel-title {
-            font-size: 20px;
+            font-size: 18px;
             font-weight: bold;
             text-align: center;
-            margin-bottom: 25px;
+            margin-bottom: 15px;
             letter-spacing: 1px;
             border-bottom: 2px solid #666;
             padding-bottom: 10px;
@@ -116,9 +135,10 @@
         #keyGuideList {
             display: flex;
             flex-direction: column;
-            gap: 15px;
-            font-size: 14px;
-            line-height: 1.6;
+            gap: 10px;
+            font-size: 13px;
+            line-height: 1.4;
+            overflow-y: auto;
         }
         .key-row {
             display: flex;
@@ -137,20 +157,20 @@
             background: #444;
             border-radius: 6px;
             padding: 12px;
-            font-size: 15px; 
+            font-size: 14px; 
             display: flex;
             flex-direction: column;
-            gap: 10px;
+            gap: 8px;
             word-break: break-all;
             white-space: pre-wrap;
         }
         
         .log-item {
             border-bottom: 1px solid #555;
-            padding-bottom: 6px;
-            line-height: 1.5;
+            padding-bottom: 4px;
+            line-height: 1.4;
         }
-        .log-time { color: #aaa; margin-right: 6px; font-size: 12px; }
+        .log-time { color: #aaa; margin-right: 6px; font-size: 11px; }
         .log-type-score { color: #2ecc71; font-weight: bold; }
         .log-type-defense { color: #e67e22; font-weight: bold; }
         .log-type-chat { color: #f1c40f; font-weight: bold; background: rgba(241, 196, 15, 0.1); border-radius: 2px; padding: 2px 4px; }
@@ -203,13 +223,15 @@
             top: 20px;
             left: 50%;
             transform: translateX(-50%);
-            background: rgba(0,0,0,0.8);
-            padding: 15px 25px;
-            border-radius: 10px;
-            border: 2px solid #fff;
+            background: rgba(0,0,0,0.9);
+            padding: 20px 35px;
+            border-radius: 12px;
+            border: 3px solid #f1c40f;
             text-align: center;
             display: none;
-            z-index: 5;
+            z-index: 25;
+            touch-action: none;
+            cursor: pointer;
         }
         .progress-bar {
             width: 300px;
@@ -227,7 +249,7 @@
             transition: width 0.05s linear;
         }
         #ui {
-            margin-top: 15px;
+            margin-top: 10px;
             font-size: 24px;
             font-weight: bold;
             display: flex;
@@ -262,8 +284,7 @@
             font-size: 13px;
         }
 
-        /* 디펜스 쿨타임 바 안내 UI - 기본 상태 숨김(display: none) */
-        #globalCooldownBarZone {
+        #globalDefenseLockUntilZone {
             margin-top: 15px;
             width: 400px;
             background: rgba(0, 0, 0, 0.6);
@@ -293,6 +314,74 @@
             width: 0%;
             height: 100%;
             background: #e74c3c;
+        }
+
+        /* 모바일용 가상 키패드 스타일 */
+        #mobileController {
+            display: none;
+            width: 95%;
+            max-width: 1000px;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 15px;
+            padding: 10px;
+            box-sizing: border-box;
+            background: rgba(255,255,255,0.05);
+            border-radius: 15px;
+        }
+        .v-joystick-container {
+            position: relative;
+            width: 140px;
+            height: 140px;
+            background: rgba(22, 22, 22, 0.6);
+            border: 3px solid #888;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            touch-action: none;
+        }
+        .v-joystick-stick {
+            position: absolute;
+            width: 55px;
+            height: 55px;
+            background: #f39c12;
+            border-radius: 50%;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+            transition: transform 0.05s linear;
+        }
+        .v-buttons-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+        }
+        .v-btn {
+            width: 70px;
+            height: 70px;
+            background: rgba(68, 68, 68, 0.8);
+            border: 3px solid #aaa;
+            color: white;
+            border-radius: 50%;
+            font-size: 14px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.4);
+            touch-action: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .v-btn:active {
+            background: #d35400;
+            border-color: #fff;
+            transform: scale(0.92);
+        }
+        .v-btn.btn-action-grab { background: #2980b9; }
+        .v-btn.btn-action-def { background: #27ae60; }
+        
+        /* 모바일 기기 감지 시 컨트롤러 표시 */
+        @media (pointer: coarse) {
+            #mobileController { display: flex; }
         }
     </style>
     <script src="/socket.io/socket.io.js"></script>
@@ -341,19 +430,19 @@
         <div class="side-panel">
             <div class="panel-title">조작키</div>
             <div id="keyGuideList">
-                <div class="key-row"><span>상하좌우 이동</span><span class="key-val">W, A, S, D</span></div>
-                <div class="key-row"><span>공 줍기</span><span class="key-val">E</span></div>
-                <div class="key-row"><span>패스</span><span class="key-val">Shift</span></div>
-                <div class="key-row"><span>슛</span><span class="key-val">Space</span></div>
-                <div class="key-row"><span>디펜스 시도</span><span class="key-val">좌클릭</span></div>
-                <div class="key-row"><span>디펜스 게임</span><span class="key-val">우클릭 연타</span></div>
+                <div class="key-row"><span>상하좌우 이동</span><span class="key-val">W, A, S, D / 조이스틱</span></div>
+                <div class="key-row"><span>공 줍기</span><span class="key-val">E / GRAB</span></div>
+                <div class="key-row"><span>패스</span><span class="key-val">Shift / PASS</span></div>
+                <div class="key-row"><span>슛</span><span class="key-val">Space / SHOOT</span></div>
+                <div class="key-row"><span>디펜스 시도</span><span class="key-val">좌클릭 / DEFENSE</span></div>
+                <div class="key-row"><span>디펜스 게임</span><span class="key-val">우클릭 / UI 연타</span></div>
             </div>
         </div>
 
         <div id="gameContainer">
             <div id="cutIn">디펜스!!</div>
             <div id="miniGameUI">
-                <div id="miniGameTitle" style="font-weight:bold; font-size:16px;">🔥 마우스 우클릭을 마구 연타하세요!! 🔥</div>
+                <div id="miniGameTitle" style="font-weight:bold; font-size:16px;">🔥 화면(UI)을 마구 연타하세요!! 🔥</div>
                 <div class="progress-bar">
                     <div id="progress"></div>
                 </div>
@@ -377,10 +466,22 @@
         <div style="color: #e74c3c;"><span id="teamLabel2">TEAM RED</span>: <span id="score2">0</span></div>
     </div>
 
-    <div id="globalCooldownBarZone">
+    <div id="globalDefenseLockUntilZone">
         <div id="cooldownTitle">⚠️ 디펜스 쿨타임 진행 중!</div>
         <div class="cooldown-progress-container">
             <div id="cooldownProgressFiller"></div>
+        </div>
+    </div>
+
+    <div id="mobileController">
+        <div class="v-joystick-container" id="vJoystickContainer">
+            <div class="v-joystick-stick" id="vJoystickStick"></div>
+        </div>
+        <div class="v-buttons-grid">
+            <div class="v-btn btn-action-grab" id="vBtnGrab">GRAB</div>
+            <div class="v-btn btn-action-def" id="vBtnDef">DEF</div>
+            <div class="v-btn" id="vBtnPass">PASS</div>
+            <div class="v-btn" id="vBtnShoot">SHOOT</div>
         </div>
     </div>
 
@@ -408,7 +509,7 @@ const maxBlueInput = document.getElementById("maxBlueInput");
 const maxRedInput = document.getElementById("maxRedInput");
 
 // 글로벌 디펜스 게이지용 DOM
-const globalCooldownBarZone = document.getElementById("globalCooldownBarZone");
+const globalDefenseLockUntilZone = document.getElementById("globalDefenseLockUntilZone");
 const cooldownTitle = document.getElementById("cooldownTitle");
 const cooldownProgressFiller = document.getElementById("cooldownProgressFiller");
 
@@ -434,6 +535,10 @@ let globalDefenseLockUntil = 0;
 let myControllingPlayer = null; 
 let keys = {};
 const registeredNames = new Set();
+
+// 모바일 가상 조이스틱 데이터 조작 좌표 벡터
+let mobileMoveX = 0;
+let mobileMoveY = 0;
 
 let lastTime = performance.now();
 
@@ -895,28 +1000,35 @@ function appendLogToUI(log) {
 
 document.getElementById("gameContainer").addEventListener("contextmenu", e => { e.preventDefault(); });
 
-// [수정] 마우스 우클릭을 클릭할 때마다 연타 반영되도록 mousedown 수정
+// 디펜스 연타 코어 로직 추상화 함수 (PC 우클릭 / 모바일 터치 둘 다 대응)
+function processMiniGameTap() {
+    if (gameState !== "MINIGAME" || !myControllingPlayer) return;
+    const p = myControllingPlayer;
+    if (activeDefender && p.team === activeDefender.team && p.id === activeDefender.id) {
+        miniGameGauge -= 2.5;
+        if (miniGameGauge < 0) miniGameGauge = 0;
+        socket.emit("syncMiniGameHit", miniGameGauge);
+    } 
+    else if (activeAttacker && p.team === activeAttacker.team && p.id === activeAttacker.id) {
+        miniGameGauge += 2.5;
+        if (miniGameGauge > 100) miniGameGauge = 100;
+        socket.emit("syncMiniGameHit", miniGameGauge);
+    }
+}
+
+// 미니게임 UI 창을 직접 터치/클릭해도 연타가 들어가도록 처리 (모바일 초최적화)
+miniGameUI.addEventListener("pointerdown", e => {
+    e.preventDefault();
+    processMiniGameTap();
+});
+
 canvas.addEventListener("mousedown", e => {
     canvas.focus(); 
     
-    // 미니게임 상태에서 마우스 우클릭 연타 입력 처리
+    // PC 마우스 우클릭 대결 처리
     if (gameState === "MINIGAME" && e.button === 2) {
         e.preventDefault();
-        if (myControllingPlayer) {
-            const p = myControllingPlayer;
-            if (activeDefender && p.team === activeDefender.team && p.id === activeDefender.id) {
-                // 수비수가 연타하면 게이지를 왼쪽(0)으로 밀어붙임 (클릭당 2.5% 전진)
-                miniGameGauge -= 2.5;
-                if (miniGameGauge < 0) miniGameGauge = 0;
-                socket.emit("syncMiniGameHit", miniGameGauge);
-            } 
-            else if (activeAttacker && p.team === activeAttacker.team && p.id === activeAttacker.id) {
-                // 공격수가 연타하면 게이지를 오른쪽(100)으로 밀어붙임
-                miniGameGauge += 2.5;
-                if (miniGameGauge > 100) miniGameGauge = 100;
-                socket.emit("syncMiniGameHit", miniGameGauge);
-            }
-        }
+        processMiniGameTap();
         return;
     }
 
@@ -957,6 +1069,38 @@ canvas.addEventListener("mousedown", e => {
             });
         }
     }
+});
+
+// 모바일용 터치로 SETUP 단계 유저 선택 대응
+canvas.addEventListener("touchstart", e => {
+    if (gameState !== "SETUP" || myControllingPlayer || e.touches.length === 0) return;
+    const rect = canvas.getBoundingClientRect();
+    const touch = e.touches[0];
+    const mouseX = touch.clientX - rect.left;
+    const mouseY = touch.clientY - rect.top;
+
+    activePlayers.forEach(p => {
+        const dist = Math.hypot(p.x - mouseX, p.y - mouseY);
+        if (dist < p.radius + 15) {
+            if (!p.ownerName) {
+                const name = prompt(`[${p.team === "BLUE" ? "블루" : "레드"} ${p.id}번] 유저 이름 입력:`);
+                if (name && name.trim() !== "") {
+                    const trimmedName = name.trim();
+                    if (registeredNames.has(trimmedName)) {
+                        alert("이미 등록된 유저명입니다.");
+                        return;
+                    }
+                    p.ownerName = trimmedName;
+                    p.socketId = socket.id;
+                    p.userToken = myUserToken; 
+                    myControllingPlayer = p;
+                    registeredNames.add(trimmedName);
+                    socket.emit("syncRegisterOwner", { team: p.team, id: p.id, ownerName: trimmedName, userToken: myUserToken });
+                    updateAdminDropdown();
+                }
+            }
+        }
+    });
 });
 
 window.addEventListener("keydown", e => {
@@ -1010,7 +1154,7 @@ function checkDefenseTrigger(player) {
         activeDefender = player;
         activeAttacker = target;
         miniGameGauge = 50;
-        miniGameTimer = 5.0; // 미니게임 제한시간 5초 유지
+        miniGameTimer = 5.0; 
         gameState = "MINIGAME";
 
         socket.emit("syncStartMiniGame", {
@@ -1020,38 +1164,111 @@ function checkDefenseTrigger(player) {
     }
 }
 
+/* --- 모바일 가상 컨트롤러 바인딩 시작 --- */
+const vJoystickContainer = document.getElementById("vJoystickContainer");
+const vJoystickStick = document.getElementById("vJoystickStick");
+let joystickActive = false;
+let joystickStartX = 0;
+let joystickStartY = 0;
+const joystickMaxRadius = 45;
+
+vJoystickContainer.addEventListener("touchstart", e => {
+    if (e.touches.length === 0) return;
+    joystickActive = true;
+    const touch = e.touches[0];
+    const rect = vJoystickContainer.getBoundingClientRect();
+    joystickStartX = rect.left + rect.width / 2;
+    joystickStartY = rect.top + rect.height / 2;
+});
+
+window.addEventListener("touchmove", e => {
+    if (!joystickActive) return;
+    const touch = Array.from(e.touches).find(t => t.target.closest("#vJoystickContainer") || joystickActive);
+    if (!touch) return;
+
+    let deltaX = touch.clientX - joystickStartX;
+    let deltaY = touch.clientY - joystickStartY;
+    const distance = Math.hypot(deltaX, deltaY);
+
+    if (distance > joystickMaxRadius) {
+        deltaX = (deltaX / distance) * joystickMaxRadius;
+        deltaY = (deltaY / distance) * joystickMaxRadius;
+    }
+
+    vJoystickStick.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
+
+    // 이동 벡터 정규화 데이터 추출 (0.0 ~ 1.0)
+    mobileMoveX = deltaX / joystickMaxRadius;
+    mobileMoveY = deltaY / joystickMaxRadius;
+}, { passive: true });
+
+const resetJoystick = () => {
+    joystickActive = false;
+    mobileMoveX = 0;
+    mobileMoveY = 0;
+    vJoystickStick.style.transform = "translate(0px, 0px)";
+};
+vJoystickContainer.addEventListener("touchend", resetJoystick);
+vJoystickContainer.addEventListener("touchcancel", resetJoystick);
+
+// 모바일 버튼 바인딩
+document.getElementById("vBtnGrab").addEventListener("touchstart", e => {
+    e.preventDefault();
+    if (gameState === "PLAYING" && myControllingPlayer) checkManualBallGrab(myControllingPlayer);
+});
+document.getElementById("vBtnDef").addEventListener("touchstart", e => {
+    e.preventDefault();
+    if (gameState === "PLAYING" && myControllingPlayer) checkDefenseTrigger(myControllingPlayer);
+});
+document.getElementById("vBtnPass").addEventListener("touchstart", e => {
+    e.preventDefault();
+    if (gameState === "PLAYING" && myControllingPlayer && ball.holder && ball.holder.team === myControllingPlayer.team && ball.holder.id === myControllingPlayer.id) {
+        passAction(myControllingPlayer);
+    }
+});
+document.getElementById("vBtnShoot").addEventListener("touchstart", e => {
+    e.preventDefault();
+    if (gameState === "PLAYING" && myControllingPlayer && ball.holder && ball.holder.team === myControllingPlayer.team && ball.holder.id === myControllingPlayer.id) {
+        shootAction(myControllingPlayer);
+    }
+});
+/* --- 모바일 가상 컨트롤러 바인딩 끝 --- */
+
 function gameLoop(currentTime) {
     const dt = (currentTime - lastTime) / 1000;
     lastTime = currentTime;
 
-    // [수정] 하단 전역 디펜스 쿨타임 바 안내 유동 활성화/비활성화 처리
     if (gameState === "PLAYING") {
         const now = Date.now();
         if (now < globalDefenseLockUntil) {
-            // 디펜스가 끝나고 쿨타임이 도는 5초 동안만 화면에 잠깐 표시
-            globalCooldownBarZone.style.display = "flex";
+            globalDefenseLockUntilZone.style.display = "flex";
             const timeLeft = globalDefenseLockUntil - now;
-            const pct = (timeLeft / 5000) * 100; // 5초 기준 계산
+            const pct = (timeLeft / 5000) * 100; 
             cooldownTitle.innerText = `⚠️ 디펜스 시스템 과부하 방지 쿨타임 (남은 시간: ${(timeLeft/1000).toFixed(1)}초)`;
             cooldownProgressFiller.style.width = `${pct}%`;
         } else {
-            // 쿨타임 5초가 다 지나면 흔적 없이 숨김
-            globalCooldownBarZone.style.display = "none";
+            globalDefenseLockUntilZone.style.display = "none";
         }
     } else {
-        // 미니게임 진행 중이거나 SETUP 상황에서도 쿨타임 바는 숨김
-        globalCooldownBarZone.style.display = "none";
+        globalDefenseLockUntilZone.style.display = "none";
     }
 
     if (gameState === "PLAYING") {
         if (myControllingPlayer) {
             let dx = 0; let dy = 0;
+            
+            // 키보드 입력 체크
             if (keys[onlineScheme.up]) dy = -1;
             if (keys[onlineScheme.down]) dy = 1;
             if (keys[onlineScheme.left]) dx = -1;
             if (keys[onlineScheme.right]) dx = 1;
-
             if (dx !== 0 && dy !== 0) { dx *= 0.7071; dy *= 0.7071; }
+
+            // 모바일 조이스틱 입력이 있다면 덮어쓰기
+            if (joystickActive) {
+                dx = mobileMoveX;
+                dy = mobileMoveY;
+            }
 
             if (dx !== 0 || dy !== 0) {
                 myControllingPlayer.move(dx, dy, dt);
@@ -1067,11 +1284,9 @@ function gameLoop(currentTime) {
         ball.update(dt);
     }
     else if (gameState === "MINIGAME") {
-        // 오직 심판(방장)의 소켓 루프에서만 공정하게 제한시간 타이머 차감 및 최종 승패 연산 수행
         if (isReferee) {
             miniGameTimer -= dt;
             if (miniGameTimer <= 0) {
-                // 5초 종료 시 게이지 수치가 50 미만이면 수비 성공, 50 초과면 공격 성공
                 let isDefWin = miniGameGauge < 50; 
                 if (Math.abs(miniGameGauge - 50) < 0.01) isDefWin = Math.random() < 0.5;
                 
@@ -1161,7 +1376,6 @@ function endMiniGame(resultData) {
         ball.holder = null;
     }
 
-    // 서버가 발행한 5초 글로벌 쿨타임 적용 동기화
     if (resultData.globalDefenseLockUntil) {
         globalDefenseLockUntil = resultData.globalDefenseLockUntil;
     }
@@ -1227,7 +1441,7 @@ socket.on("onInitRoomState", (state) => {
             document.getElementById("teamNameRedInput").disabled = false;
             socket.emit("syncRegisterDirector", { name: myDirectorName, token: myUserToken });
         } else {
-            document.getElementById("statusText").innerText = `[관전자 모드] 감독 ${state.directorName}님이 방을 관리 중입니다.`;
+            document.getElementById("statusText").innerText = `[관전자 모드] 감독 ${state.state.directorName}님이 방을 관리 중입니다.`;
         }
     } else {
         isReferee = false;
@@ -1272,7 +1486,7 @@ socket.on("onMatchCapacityChange", (data) => {
     maxBluePlayers = data.blueMax;
     maxRedPlayers = data.redMax;
     maxBlueInput.value = maxBluePlayers;
-    maxRedInput.value = maxRedPlayers;
+    maxRedInput.value = rMax;
     buildActivePlayersPool(true);
 });
 

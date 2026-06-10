@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>다들 모여!</title>
     <style>
         body {
@@ -115,11 +115,31 @@
             width: 440px;
         }
 
+        /* 반응형 및 모바일 최적화 핵심 스타일 업데이트 */
+        #gameContainer {
+            position: relative;
+            box-shadow: 0 0 25px rgba(0,0,0,0.7);
+            width: 100%;
+            max-width: 1000px; /* PC 해상도 최대 규격 고정 */
+            margin: 0 auto;
+        }
+        canvas {
+            background-color: #d35400;
+            border: 4px solid #fff;
+            display: block;
+            border-radius: 4px;
+            outline: none;
+            
+            /* 모바일 화면 규격에 맞춰 비율을 유지하며 축소 유도 */
+            width: 100% !important;
+            height: auto !important;
+            box-sizing: border-box;
+        }
+
         @media (max-width: 1024px) {
-            .side-panel { width: 100% !important; height: 200px !important; }
-            .side-panel.log-panel { height: 250px !important; }
-            #gameContainer { order: -1; width: 100%; overflow-x: auto; display: flex; justify-content: center; }
-            canvas { min-width: 1000px; }
+            .side-panel { width: 100% !important; height: 160px !important; }
+            .side-panel.log-panel { height: 200px !important; }
+            #gameContainer { order: -1; width: 100%; }
         }
 
         .panel-title {
@@ -190,26 +210,15 @@
             border-radius: 4px;
         }
 
-        #gameContainer {
-            position: relative;
-            box-shadow: 0 0 25px rgba(0,0,0,0.7);
-        }
-        canvas {
-            background-color: #d35400;
-            border: 4px solid #fff;
-            display: block;
-            border-radius: 4px;
-            outline: none;
-        }
         #cutIn {
             position: absolute;
             top: 40%;
             left: 50%;
             transform: translate(-50%, -50%) scale(0);
-            font-size: 70px;
+            font-size: 50px;
             font-weight: 900;
             color: #e74c3c;
-            text-shadow: -4px -4px 0 #fff, 4px -4px 0 #fff, -4px 4px 0 #fff, 4px 4px 0 #fff, 0px 8px 10px rgba(0,0,0,0.5);
+            text-shadow: -3px -3px 0 #fff, 3px -3px 0 #fff, -3px 3px 0 #fff, 3px 3px 0 #fff, 0px 6px 8px rgba(0,0,0,0.5);
             font-style: italic;
             pointer-events: none;
             transition: transform 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275);
@@ -224,7 +233,7 @@
             left: 50%;
             transform: translateX(-50%);
             background: rgba(0,0,0,0.9);
-            padding: 20px 35px;
+            padding: 15px 25px;
             border-radius: 12px;
             border: 3px solid #f1c40f;
             text-align: center;
@@ -232,10 +241,13 @@
             z-index: 25;
             touch-action: none;
             cursor: pointer;
+            width: 80%;
+            max-width: 320px;
+            box-sizing: border-box;
         }
         .progress-bar {
-            width: 300px;
-            height: 25px;
+            width: 100%;
+            height: 20px;
             background-color: #555;
             border-radius: 10px;
             overflow: hidden;
@@ -286,7 +298,8 @@
 
         #globalDefenseLockUntilZone {
             margin-top: 15px;
-            width: 400px;
+            width: 90%;
+            max-width: 400px;
             background: rgba(0, 0, 0, 0.6);
             border: 1px solid #666;
             padding: 8px 12px;
@@ -316,53 +329,59 @@
             background: #e74c3c;
         }
 
-        /* 모바일용 가상 키패드 스타일 */
+        /* 📱 모바일 가상 조작 키패드 고정 화면(Fixed overlay) 디자인으로 대개편 */
         #mobileController {
-            display: none;
-            width: 95%;
-            max-width: 1000px;
+            display: none; /* 기본 숨김 */
+            position: fixed;
+            left: 0;
+            bottom: 0;
+            width: 100vw;
+            height: 160px;
             justify-content: space-between;
             align-items: center;
-            margin-top: 15px;
-            padding: 10px;
+            padding: 10px 20px;
             box-sizing: border-box;
-            background: rgba(255,255,255,0.05);
-            border-radius: 15px;
+            background: rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+            z-index: 9999; /* 무조건 최상단 배치 */
+            pointer-events: none; /* 패널 자체는 터치 관통 */
         }
         .v-joystick-container {
             position: relative;
-            width: 140px;
-            height: 140px;
-            background: rgba(22, 22, 22, 0.6);
-            border: 3px solid #888;
+            width: 120px;
+            height: 120px;
+            background: rgba(22, 22, 22, 0.7);
+            border: 3px solid #f39c12;
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
             touch-action: none;
+            pointer-events: auto; /* 터치 활성화 */
         }
         .v-joystick-stick {
             position: absolute;
-            width: 55px;
-            height: 55px;
+            width: 45px;
+            height: 45px;
             background: #f39c12;
             border-radius: 50%;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
-            transition: transform 0.05s linear;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.6);
         }
         .v-buttons-grid {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
-            gap: 12px;
+            gap: 8px;
+            pointer-events: auto; /* 터치 활성화 */
         }
         .v-btn {
-            width: 70px;
-            height: 70px;
-            background: rgba(68, 68, 68, 0.8);
-            border: 3px solid #aaa;
+            width: 60px;
+            height: 60px;
+            background: rgba(50, 50, 50, 0.85);
+            border: 2px solid #aaa;
             color: white;
             border-radius: 50%;
-            font-size: 14px;
+            font-size: 11px;
             font-weight: bold;
             display: flex;
             align-items: center;
@@ -374,14 +393,24 @@
         .v-btn:active {
             background: #d35400;
             border-color: #fff;
-            transform: scale(0.92);
+            transform: scale(0.9);
         }
-        .v-btn.btn-action-grab { background: #2980b9; }
-        .v-btn.btn-action-def { background: #27ae60; }
+        .v-btn.btn-action-grab { background: rgba(41, 128, 185, 0.9); border-color: #3498db; }
+        .v-btn.btn-action-def { background: rgba(39, 174, 96, 0.9); border-color: #2ecc71; }
         
-        /* 모바일 기기 감지 시 컨트롤러 표시 */
+        /* 모바일 기기(터치 가능 장치) 환경 미디어 쿼리 */
         @media (pointer: coarse) {
             #mobileController { display: flex; }
+            body { padding-bottom: 180px; } /* 하단 오버레이 패널 공간 확보를 위한 패딩 설정 */
+        }
+
+        /* 전체화면 버튼 스타일 */
+        #fullscreenBtn {
+            background-color: #8e44ad;
+            color: #fff;
+        }
+        #fullscreenBtn:hover {
+            background-color: #732d91;
         }
     </style>
     <script src="/socket.io/socket.io.js"></script>
@@ -389,17 +418,19 @@
 <body>
 
     <div id="lobby">
+        <button id="fullscreenBtn" onclick="requestFullScreen()">📱 전체화면 켜기</button>
+
         <div id="refereeZone" style="display: flex; gap: 8px; align-items: center;">
-            <label for="refName">감독 이름: </label>
-            <input type="text" id="refName" placeholder="감독명 입력" style="width: 90px;">
+            <label for="refName">감독: </label>
+            <input type="text" id="refName" placeholder="감독명" style="width: 70px;">
             <label for="refKey">코드: </label>
             <input type="password" id="refKey" placeholder="코드">
-            <button onclick="authReferee()" id="authBtn">감독 임명</button>
+            <button onclick="authReferee()" id="authBtn">임명</button>
         </div>
         
         <div id="adminSkillZone">
             <label id="directorTitleLabel" style="color: #f1c40f; margin-right: 5px; font-weight: bold;"></label>
-            <label>경기력 관리:</label>
+            <label>경기력:</label>
             <select id="adminTargetPlayer" onchange="loadTargetSkillLevel()"></select>
             <input type="number" id="adminSkillInput" min="5.0" max="9.9" step="0.1" value="5.0">
             <button onclick="updatePlayerSkill()">적용</button>
@@ -408,7 +439,7 @@
 
         <span style="color:#555;">|</span>
 
-        <label>팀명 세팅: </label>
+        <label>팀명: </label>
         <input type="text" id="teamNameBlueInput" value="TEAM BLUE" placeholder="블루팀명" oninput="sendLiveTeamName('BLUE')" disabled>
         <input type="text" id="teamNameRedInput" value="TEAM RED" placeholder="레드팀명" oninput="sendLiveTeamName('RED')" disabled>
 
@@ -420,9 +451,9 @@
             <span style="color: #e74c3c; font-weight: bold;">RED</span>
         </div>
 
-        <button id="startBtn" onclick="startGame()" disabled>[시작] GAME START</button>
-        <button id="pauseBtn" onclick="togglePause()" disabled>[정지] PAUSE</button>
-        <button id="resetBtn" onclick="triggerManualReset()" disabled>[초기화] RESET MATCH</button>
+        <button id="startBtn" onclick="startGame()" disabled>[시작] START</button>
+        <button id="pauseBtn" onclick="togglePause()" disabled>PAUSE</button>
+        <button id="resetBtn" onclick="triggerManualReset()" disabled>RESET</button>
         <span id="statusText" style="color: #f1c40f; margin-left: 5px;">[관전자 모드] 코드를 입력하세요.</span>
     </div>
     
@@ -430,11 +461,11 @@
         <div class="side-panel">
             <div class="panel-title">조작키</div>
             <div id="keyGuideList">
-                <div class="key-row"><span>상하좌우 이동</span><span class="key-val">W, A, S, D / 조이스틱</span></div>
+                <div class="key-row"><span>상하좌우 이동</span><span class="key-val">W,A,S,D / 패드</span></div>
                 <div class="key-row"><span>공 줍기</span><span class="key-val">E / GRAB</span></div>
                 <div class="key-row"><span>패스</span><span class="key-val">Shift / PASS</span></div>
                 <div class="key-row"><span>슛</span><span class="key-val">Space / SHOOT</span></div>
-                <div class="key-row"><span>디펜스 시도</span><span class="key-val">좌클릭 / DEFENSE</span></div>
+                <div class="key-row"><span>디펜스 시도</span><span class="key-val">좌클릭 / DEF</span></div>
                 <div class="key-row"><span>디펜스 게임</span><span class="key-val">우클릭 / UI 연타</span></div>
             </div>
         </div>
@@ -442,11 +473,11 @@
         <div id="gameContainer">
             <div id="cutIn">디펜스!!</div>
             <div id="miniGameUI">
-                <div id="miniGameTitle" style="font-weight:bold; font-size:16px;">🔥 화면(UI)을 마구 연타하세요!! 🔥</div>
+                <div id="miniGameTitle" style="font-weight:bold; font-size:14px;">🔥 화면(UI)을 마구 연타하세요!! 🔥</div>
                 <div class="progress-bar">
                     <div id="progress"></div>
                 </div>
-                <div id="miniGameVS" style="font-size:12px; margin-top:5px; color:#ccc;">수비수 VS 공격수</div>
+                <div id="miniGameVS" style="font-size:11px; margin-top:5px; color:#ccc;">수비수 VS 공격수</div>
             </div>
             <canvas id="gameCanvas" width="1000" height="500" tabindex="1"></canvas>
         </div>
@@ -508,7 +539,6 @@ const chatInputZone = document.getElementById("chatInputZone");
 const maxBlueInput = document.getElementById("maxBlueInput");
 const maxRedInput = document.getElementById("maxRedInput");
 
-// 글로벌 디펜스 게이지용 DOM
 const globalDefenseLockUntilZone = document.getElementById("globalDefenseLockUntilZone");
 const cooldownTitle = document.getElementById("cooldownTitle");
 const cooldownProgressFiller = document.getElementById("cooldownProgressFiller");
@@ -536,7 +566,6 @@ let myControllingPlayer = null;
 let keys = {};
 const registeredNames = new Set();
 
-// 모바일 가상 조이스틱 데이터 조작 좌표 벡터
 let mobileMoveX = 0;
 let mobileMoveY = 0;
 
@@ -558,6 +587,14 @@ const onlineScheme = {
     pass: 'shift', 
     shoot: ' ' 
 };
+
+// 모바일 전체화면 API 호출 함수
+function requestFullScreen() {
+    const docEl = document.documentElement;
+    if (docEl.requestFullscreen) { docEl.requestFullscreen(); }
+    else if (docEl.webkitRequestFullscreen) { docEl.webkitRequestFullscreen(); }
+    else if (docEl.msRequestFullscreen) { docEl.msRequestFullscreen(); }
+}
 
 class Player {
     constructor(x, y, team, id, spawnIndex) {
@@ -1000,7 +1037,6 @@ function appendLogToUI(log) {
 
 document.getElementById("gameContainer").addEventListener("contextmenu", e => { e.preventDefault(); });
 
-// 디펜스 연타 코어 로직 추상화 함수 (PC 우클릭 / 모바일 터치 둘 다 대응)
 function processMiniGameTap() {
     if (gameState !== "MINIGAME" || !myControllingPlayer) return;
     const p = myControllingPlayer;
@@ -1016,7 +1052,6 @@ function processMiniGameTap() {
     }
 }
 
-// 미니게임 UI 창을 직접 터치/클릭해도 연타가 들어가도록 처리 (모바일 초최적화)
 miniGameUI.addEventListener("pointerdown", e => {
     e.preventDefault();
     processMiniGameTap();
@@ -1024,8 +1059,6 @@ miniGameUI.addEventListener("pointerdown", e => {
 
 canvas.addEventListener("mousedown", e => {
     canvas.focus(); 
-    
-    // PC 마우스 우클릭 대결 처리
     if (gameState === "MINIGAME" && e.button === 2) {
         e.preventDefault();
         processMiniGameTap();
@@ -1034,8 +1067,10 @@ canvas.addEventListener("mousedown", e => {
 
     if (e.button === 0) {
         const rect = canvas.getBoundingClientRect();
-        const mouseX = e.clientX - rect.left;
-        const mouseY = e.clientY - rect.top;
+        
+        // 중요: 스케일링된 크기에 대응해 마우스 실좌표 계산 보정 추가
+        const mouseX = ((e.clientX - rect.left) / rect.width) * canvas.width;
+        const mouseY = ((e.clientY - rect.top) / rect.height) * canvas.height;
         
         if ((gameState === "SETUP" || gameState === "PLAYING") && myControllingPlayer) {
             if (gameState === "PLAYING") checkDefenseTrigger(myControllingPlayer);
@@ -1045,7 +1080,7 @@ canvas.addEventListener("mousedown", e => {
         if (gameState === "SETUP" && !myControllingPlayer) {
             activePlayers.forEach(p => {
                 const dist = Math.hypot(p.x - mouseX, p.y - mouseY);
-                if (dist < p.radius + 10) {
+                if (dist < p.radius + 15) {
                     if (!p.ownerName) {
                         const name = prompt(`[${p.team === "BLUE" ? "블루" : "레드"} ${p.id}번] 유저 이름 입력:`);
                         if (name && name.trim() !== "") {
@@ -1071,17 +1106,18 @@ canvas.addEventListener("mousedown", e => {
     }
 });
 
-// 모바일용 터치로 SETUP 단계 유저 선택 대응
 canvas.addEventListener("touchstart", e => {
     if (gameState !== "SETUP" || myControllingPlayer || e.touches.length === 0) return;
     const rect = canvas.getBoundingClientRect();
     const touch = e.touches[0];
-    const mouseX = touch.clientX - rect.left;
-    const mouseY = touch.clientY - rect.top;
+    
+    // 중요: 스케일링된 크기에 대응해 터치 실좌표 계산 보정 추가
+    const mouseX = ((touch.clientX - rect.left) / rect.width) * canvas.width;
+    const mouseY = ((touch.clientY - rect.top) / rect.height) * canvas.height;
 
     activePlayers.forEach(p => {
         const dist = Math.hypot(p.x - mouseX, p.y - mouseY);
-        if (dist < p.radius + 15) {
+        if (dist < p.radius + 20) {
             if (!p.ownerName) {
                 const name = prompt(`[${p.team === "BLUE" ? "블루" : "레드"} ${p.id}번] 유저 이름 입력:`);
                 if (name && name.trim() !== "") {
@@ -1144,8 +1180,6 @@ function checkManualBallGrab(player) {
 
 function checkDefenseTrigger(player) {
     if (gameState !== "PLAYING" || !ball.holder || ball.holder.team === player.team) return;
-    
-    // 글로벌 디펜스 쿨타임이 진행 중이면 디펜스 진입 불가
     if (Date.now() < globalDefenseLockUntil) return;
 
     const target = ball.holder;
@@ -1164,13 +1198,13 @@ function checkDefenseTrigger(player) {
     }
 }
 
-/* --- 모바일 가상 컨트롤러 바인딩 시작 --- */
+/* --- 모바일 가상 컨트롤러 바인딩 코드 --- */
 const vJoystickContainer = document.getElementById("vJoystickContainer");
 const vJoystickStick = document.getElementById("vJoystickStick");
 let joystickActive = false;
 let joystickStartX = 0;
 let joystickStartY = 0;
-const joystickMaxRadius = 45;
+const joystickMaxRadius = 40;
 
 vJoystickContainer.addEventListener("touchstart", e => {
     if (e.touches.length === 0) return;
@@ -1197,7 +1231,6 @@ window.addEventListener("touchmove", e => {
 
     vJoystickStick.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
 
-    // 이동 벡터 정규화 데이터 추출 (0.0 ~ 1.0)
     mobileMoveX = deltaX / joystickMaxRadius;
     mobileMoveY = deltaY / joystickMaxRadius;
 }, { passive: true });
@@ -1211,7 +1244,6 @@ const resetJoystick = () => {
 vJoystickContainer.addEventListener("touchend", resetJoystick);
 vJoystickContainer.addEventListener("touchcancel", resetJoystick);
 
-// 모바일 버튼 바인딩
 document.getElementById("vBtnGrab").addEventListener("touchstart", e => {
     e.preventDefault();
     if (gameState === "PLAYING" && myControllingPlayer) checkManualBallGrab(myControllingPlayer);
@@ -1232,7 +1264,6 @@ document.getElementById("vBtnShoot").addEventListener("touchstart", e => {
         shootAction(myControllingPlayer);
     }
 });
-/* --- 모바일 가상 컨트롤러 바인딩 끝 --- */
 
 function gameLoop(currentTime) {
     const dt = (currentTime - lastTime) / 1000;
@@ -1244,7 +1275,7 @@ function gameLoop(currentTime) {
             globalDefenseLockUntilZone.style.display = "flex";
             const timeLeft = globalDefenseLockUntil - now;
             const pct = (timeLeft / 5000) * 100; 
-            cooldownTitle.innerText = `⚠️ 디펜스 시스템 과부하 방지 쿨타임 (남은 시간: ${(timeLeft/1000).toFixed(1)}초)`;
+            cooldownTitle.innerText = `⚠️ 디펜스 쿨타임 (${(timeLeft/1000).toFixed(1)}초)`;
             cooldownProgressFiller.style.width = `${pct}%`;
         } else {
             globalDefenseLockUntilZone.style.display = "none";
@@ -1256,15 +1287,12 @@ function gameLoop(currentTime) {
     if (gameState === "PLAYING") {
         if (myControllingPlayer) {
             let dx = 0; let dy = 0;
-            
-            // 키보드 입력 체크
             if (keys[onlineScheme.up]) dy = -1;
             if (keys[onlineScheme.down]) dy = 1;
             if (keys[onlineScheme.left]) dx = -1;
             if (keys[onlineScheme.right]) dx = 1;
             if (dx !== 0 && dy !== 0) { dx *= 0.7071; dy *= 0.7071; }
 
-            // 모바일 조이스틱 입력이 있다면 덮어쓰기
             if (joystickActive) {
                 dx = mobileMoveX;
                 dy = mobileMoveY;
@@ -1433,7 +1461,7 @@ socket.on("onInitRoomState", (state) => {
         if (state.directorToken === myUserToken) {
             isReferee = true;
             myDirectorName = state.directorName;
-            document.getElementById("directorTitleLabel").innerText = `[공식 감독관: ${myDirectorName}]`;
+            document.getElementById("directorTitleLabel").innerText = `[감독관: ${myDirectorName}]`;
             document.getElementById("adminSkillZone").style.display = "flex";
             document.getElementById("refereeZone").style.display = "none";
             chatInputZone.style.display = "flex";
@@ -1441,7 +1469,7 @@ socket.on("onInitRoomState", (state) => {
             document.getElementById("teamNameRedInput").disabled = false;
             socket.emit("syncRegisterDirector", { name: myDirectorName, token: myUserToken });
         } else {
-            document.getElementById("statusText").innerText = `[관전자 모드] 감독 ${state.state.directorName}님이 방을 관리 중입니다.`;
+            document.getElementById("statusText").innerText = `[관전자 모드] 감독 ${state.directorName}님이 방을 관리 중입니다.`;
         }
     } else {
         isReferee = false;
@@ -1486,7 +1514,7 @@ socket.on("onMatchCapacityChange", (data) => {
     maxBluePlayers = data.blueMax;
     maxRedPlayers = data.redMax;
     maxBlueInput.value = maxBluePlayers;
-    maxRedInput.value = rMax;
+    maxRedInput.value = data.redMax;
     buildActivePlayersPool(true);
 });
 
@@ -1550,7 +1578,7 @@ socket.on("onRegisterDirector", (data) => {
     if (data.directorToken === myUserToken) {
         isReferee = true;
         myDirectorName = data.directorName;
-        document.getElementById("directorTitleLabel").innerText = `[공식 감독관: ${myDirectorName}]`;
+        document.getElementById("directorTitleLabel").innerText = `[감독관: ${myDirectorName}]`;
         document.getElementById("adminSkillZone").style.display = "flex";
         document.getElementById("refereeZone").style.display = "none";
         chatInputZone.style.display = "flex";
@@ -1646,11 +1674,11 @@ function toggleUIVisibility() {
         if (gameState === "PAUSE") {
             statusText.innerText = "[일시정지] 경기가 멈췄습니다.";
             statusText.style.color = "#e74c3c";
-            pauseBtn.innerText = "[재개] RESUME";
+            pauseBtn.innerText = "RESUME";
         } else {
             statusText.innerText = "[경기 중] 매치 진행 중!";
             statusText.style.color = "#2ecc71";
-            pauseBtn.innerText = "[정지] PAUSE";
+            pauseBtn.innerText = "PAUSE";
         }
     } else {
         statusText.innerText = isReferee ? "[대기 모드] 팀별 매치 인원을 설정하고 경기를 시작하세요." : "[관전자 모드] 코드를 입력하세요.";
@@ -1658,7 +1686,7 @@ function toggleUIVisibility() {
         document.getElementById("startBtn").disabled = !isReferee;
         pauseBtn.disabled = true;
         resetBtn.disabled = !isReferee;
-        pauseBtn.innerText = "[정지] PAUSE";
+        pauseBtn.innerText = "PAUSE";
     }
 }
 </script>

@@ -3,167 +3,72 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>다들 모여!</title>
+    <title>다들 모여! - 멀티 세션 연동 버전</title>
     <style>
         body {
-            margin: 0;
-            background-color: #222;
-            color: #fff;
-            font-family: 'Arial', sans-serif;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: flex-start;
-            min-height: 100vh;
-            overflow-x: hidden;
-            overflow-y: auto;
-            padding-bottom: 20px;
-            box-sizing: border-box;
-            -webkit-user-select: none;
-            user-select: none;
+            margin: 0; background-color: #222; color: #fff;
+            font-family: 'Arial', sans-serif; display: flex; flex-direction: column;
+            align-items: center; justify-content: flex-start; min-height: 100vh;
+            overflow-x: hidden; overflow-y: auto; padding-bottom: 20px; box-sizing: border-box;
+            -webkit-user-select: none; user-select: none;
         }
 
-        /* 🚪 초기 방 입장용 카드 UI 디자인 */
+        /* 🚪 세션 입력용 확장 카드 UI 디자인 */
         #roomEntrance {
-            position: fixed;
-            top: 0; left: 0; width: 100vw; height: 100vh;
-            background: #1a1a1a;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            z-index: 10000;
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: #1a1a1a; display: flex; flex-direction: column;
+            align-items: center; justify-content: center; z-index: 10000;
         }
         .entrance-box {
-            background: #2c3e50;
-            padding: 30px;
-            border-radius: 12px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-            text-align: center;
-            border: 2px solid #f39c12;
-            max-width: 400px;
-            width: 85%;
+            background: #2c3e50; padding: 25px; border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5); text-align: center;
+            border: 2px solid #f39c12; max-width: 420px; width: 85%;
         }
-        .entrance-box h1 { margin-top: 0; color: #f39c12; font-size: 26px; }
-        .entrance-box input {
-            width: 80%; padding: 12px; font-size: 18px; text-align: center;
-            margin: 15px 0; border-radius: 6px; border: none; font-weight: bold;
-            background: #fff; color: #000;
+        .entrance-box h1 { margin-top: 0; color: #f39c12; font-size: 24px; }
+        .input-group {
+            display: flex; flex-direction: column; margin-bottom: 12px; text-align: left;
+        }
+        .input-group label {
+            font-size: 13px; color: #f1c40f; font-weight: bold; margin-bottom: 4px;
+        }
+        .entrance-box input, .entrance-box select {
+            width: 100%; padding: 10px; font-size: 16px; text-align: center;
+            border-radius: 6px; border: none; font-weight: bold;
+            background: #fff; color: #000; box-sizing: border-box;
         }
         .entrance-box button {
-            width: 85%; padding: 12px; font-size: 16px; background: #e67e22;
+            width: 100%; padding: 12px; font-size: 16px; background: #e67e22;
             color: #fff; border: none; border-radius: 6px; font-weight: bold; cursor: pointer;
+            margin-top: 10px;
         }
         .entrance-box button:hover { background: #d35400; }
         
         #lobby {
-            margin-top: 10px;
-            margin-bottom: 15px;
-            display: none; /* 방 입장 전까지 숨김 */
-            gap: 12px;
-            align-items: center;
-            background: #333;
-            padding: 10px 20px;
-            border-radius: 8px;
-            border: 1px solid #555;
-            flex-wrap: wrap;
-            z-index: 20;
-            justify-content: center;
-            width: 95%;
-            max-width: 1400px;
-            box-sizing: border-box;
+            margin-top: 10px; margin-bottom: 15px; display: none; gap: 12px;
+            align-items: center; background: #333; padding: 10px 20px;
+            border-radius: 8px; border: 1px solid #555; flex-wrap: wrap;
+            z-index: 20; justify-content: center; width: 95%; max-width: 1400px; box-sizing: border-box;
         }
         
-        /* 메인 레이아웃 초기엔 숨김 */
         #mainLayout {
-            display: none; 
-            gap: 20px;
-            align-items: flex-start;
-            justify-content: center;
-            width: 100%;
-            max-width: 1780px; 
-            padding: 0 10px;
-            box-sizing: border-box;
-            flex-wrap: wrap;
+            display: none; gap: 20px; align-items: flex-start; justify-content: center;
+            width: 100%; max-width: 1780px; padding: 0 10px; box-sizing: border-box; flex-wrap: wrap;
         }
 
-        select, button, input {
-            padding: 8px 12px;
-            font-size: 14px;
-            font-weight: bold;
-            border-radius: 4px;
-            border: none;
-        }
-        input[type="password"] {
-            background-color: #444;
-            color: #fff;
-            border: 1px solid #666;
-            width: 80px;
-            text-align: center;
-        }
-        input[type="text"] {
-            background-color: #444;
-            color: #fff;
-            border: 1px solid #666;
-            width: 100px;
-        }
-        input[type="number"] {
-            background-color: #444;
-            color: #fff;
-            border: 1px solid #666;
-            width: 45px;
-            text-align: center;
-        }
-        select {
-            background-color: #444;
-            color: #fff;
-            border: 1px solid #666;
-        }
-        button {
-            background-color: #f39c12;
-            color: #fff;
-            cursor: pointer;
-            touch-action: manipulation;
-        }
-        button:hover {
-            background-color: #d35400;
-        }
-        button:disabled, select:disabled, input:disabled {
-            background-color: #555;
-            color: #888;
-            cursor: not-allowed;
-        }
+        select, button, input { padding: 8px 12px; font-size: 14px; font-weight: bold; border-radius: 4px; border: none; }
+        input[type="password"] { background-color: #444; color: #fff; border: 1px solid #666; width: 80px; text-align: center; }
+        input[type="text"] { background-color: #444; color: #fff; border: 1px solid #666; width: 100px; }
+        input[type="number"] { background-color: #444; color: #fff; border: 1px solid #666; width: 45px; text-align: center; }
+        select { background-color: #444; color: #fff; border: 1px solid #666; }
+        button { background-color: #f39c12; color: #fff; cursor: pointer; touch-action: manipulation; }
+        button:hover { background-color: #d35400; }
+        button:disabled, select:disabled, input:disabled { background-color: #555; color: #888; cursor: not-allowed; }
 
-        .side-panel {
-            width: 240px;
-            height: 508px; 
-            background-color: #555555;
-            border-radius: 12px;
-            padding: 20px;
-            box-sizing: border-box;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
-            display: flex;
-            flex-direction: column;
-        }
+        .side-panel { width: 240px; height: 508px; background-color: #555555; border-radius: 12px; padding: 20px; box-sizing: border-box; box-shadow: 0 4px 15px rgba(0,0,0,0.5); display: flex; flex-direction: column; }
         .side-panel.log-panel { width: 440px; }
 
-        #gameContainer {
-            position: relative;
-            box-shadow: 0 0 25px rgba(0,0,0,0.7);
-            width: 100%;
-            max-width: 1000px;
-            margin: 0 auto;
-        }
-        canvas {
-            background-color: #d35400;
-            border: 4px solid #fff;
-            display: block;
-            border-radius: 4px;
-            outline: none;
-            width: 100% !important;
-            height: auto !important;
-            box-sizing: border-box;
-        }
+        #gameContainer { position: relative; box-shadow: 0 0 25px rgba(0,0,0,0.7); width: 100%; max-width: 1000px; margin: 0 auto; }
+        canvas { background-color: #d35400; border: 4px solid #fff; display: block; border-radius: 4px; outline: none; width: 100% !important; height: auto !important; box-sizing: border-box; }
 
         @media (max-width: 1024px) {
             .side-panel { width: 100% !important; height: 160px !important; }
@@ -171,37 +76,12 @@
             #gameContainer { order: -1; width: 100%; }
         }
 
-        .panel-title {
-            font-size: 18px;
-            font-weight: bold;
-            text-align: center;
-            margin-bottom: 15px;
-            letter-spacing: 1px;
-            border-bottom: 2px solid #666;
-            padding-bottom: 10px;
-        }
-
-        #keyGuideList {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-            font-size: 13px;
-            line-height: 1.4;
-            overflow-y: auto;
-        }
-        .key-row {
-            display: flex;
-            justify-content: space-between;
-            border-bottom: 1px dashed rgba(255,255,255,0.1);
-            padding-bottom: 5px;
-        }
+        .panel-title { font-size: 18px; font-weight: bold; text-align: center; margin-bottom: 15px; letter-spacing: 1px; border-bottom: 2px solid #666; padding-bottom: 10px; }
+        #keyGuideList { display: flex; flex-direction: column; gap: 10px; font-size: 13px; line-height: 1.4; overflow-y: auto; }
+        .key-row { display: flex; justify-content: space-between; border-bottom: 1px dashed rgba(255,255,255,0.1); padding-bottom: 5px; }
         .key-val { color: #f1c40f; font-weight: bold; }
 
-        #logContainer {
-            flex: 1; overflow-y: auto; background: #444; border-radius: 6px;
-            padding: 12px; font-size: 14px; display: flex; flex-direction: column;
-            gap: 8px; word-break: break-all; white-space: pre-wrap;
-        }
+        #logContainer { flex: 1; overflow-y: auto; background: #444; border-radius: 6px; padding: 12px; font-size: 14px; display: flex; flex-direction: column; gap: 8px; word-break: break-all; white-space: pre-wrap; }
         .log-item { border-bottom: 1px solid #555; padding-bottom: 4px; line-height: 1.4; }
         .log-time { color: #aaa; margin-right: 6px; font-size: 11px; }
         .log-type-score { color: #2ecc71; font-weight: bold; }
@@ -209,17 +89,13 @@
         .log-type-chat { color: #f1c40f; font-weight: bold; background: rgba(241, 196, 15, 0.1); border-radius: 2px; padding: 2px 4px; }
 
         #chatInputZone { margin-top: 10px; display: none; gap: 5px; }
-        #directorChatMsg {
-            flex: 1; background: #333; color: #fff; border: 1px solid #666;
-            padding: 6px; font-size: 13px; border-radius: 4px;
-        }
+        #directorChatMsg { flex: 1; background: #333; color: #fff; border: 1px solid #666; padding: 6px; font-size: 13px; border-radius: 4px; }
 
         #cutIn {
             position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%) scale(0);
             font-size: 50px; font-weight: 900; color: #e74c3c;
             text-shadow: -3px -3px 0 #fff, 3px -3px 0 #fff, -3px 3px 0 #fff, 3px 3px 0 #fff, 0px 6px 8px rgba(0,0,0,0.5);
-            font-style: italic; pointer-events: none;
-            transition: transform 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275); z-index: 10;
+            font-style: italic; pointer-events: none; transition: transform 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275); z-index: 10;
         }
         #cutIn.active { transform: translate(-50%, -50%) scale(1); }
         
@@ -229,19 +105,14 @@
             border: 3px solid #f1c40f; text-align: center; display: none; z-index: 25;
             touch-action: none; cursor: pointer; width: 80%; max-width: 320px; box-sizing: border-box;
         }
-        .progress-bar {
-            width: 100%; height: 20px; background-color: #555;
-            border-radius: 10px; overflow: hidden; margin-top: 10px; border: 1px solid #fff;
-        }
+        .progress-bar { width: 100%; height: 20px; background-color: #555; border-radius: 10px; overflow: hidden; margin-top: 10px; border: 1px solid #fff; }
         #progress { width: 50%; height: 100%; background: linear-gradient(90deg, #3498db, #e74c3c); transition: width 0.05s linear; }
         
         #ui { margin-top: 10px; font-size: 24px; font-weight: bold; display: none; gap: 60px; justify-content: center; width: 100%; }
-        
         #adminSkillZone { display: none; align-items: center; gap: 5px; background: #444; padding: 3px 8px; border-radius: 4px; border: 1px solid #666; }
         #pauseBtn { background-color: #34495e; color: #fff; }
         #resetBtn { background-color: #c0392b; color: #fff; }
         #clearLogBtn { background-color: #7f8c8d; color: #fff; margin-left: 5px; }
-        
         .capacity-zone { display: flex; align-items: center; gap: 4px; background: #444; padding: 4px 8px; border-radius: 4px; border: 1px solid #666; font-size: 13px; }
 
         #globalDefenseLockUntilZone {
@@ -259,11 +130,7 @@
             background: rgba(0, 0, 0, 0.4); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
             z-index: 9999; pointer-events: none;
         }
-        .v-joystick-container {
-            position: relative; width: 120px; height: 120px; background: rgba(22, 22, 22, 0.7);
-            border: 3px solid #f39c12; border-radius: 50%; display: flex; align-items: center; justify-content: center;
-            touch-action: none; pointer-events: auto;
-        }
+        .v-joystick-container { position: relative; width: 120px; height: 120px; background: rgba(22, 22, 22, 0.7); border: 3px solid #f39c12; border-radius: 50%; display: flex; align-items: center; justify-content: center; touch-action: none; pointer-events: auto; }
         .v-joystick-stick { position: absolute; width: 45px; height: 45px; background: #f39c12; border-radius: 50%; box-shadow: 0 4px 8px rgba(0,0,0,0.6); }
         .v-buttons-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; pointer-events: auto; }
         .v-btn {
@@ -276,10 +143,7 @@
         .v-btn.btn-action-grab { background: rgba(41, 128, 185, 0.9); border-color: #3498db; }
         .v-btn.btn-action-def { background: rgba(39, 174, 96, 0.9); border-color: #2ecc71; }
         
-        @media (pointer: coarse) {
-            #mobileController.active { display: flex; }
-        }
-
+        @media (pointer: coarse) { #mobileController.active { display: flex; } }
         #fullscreenBtn { background-color: #8e44ad; color: #fff; }
         #roomInfoBadge { background-color: #2980b9; color: white; padding: 6px 12px; border-radius: 4px; font-size: 13px; font-weight: bold; }
     </style>
@@ -289,10 +153,27 @@
 
     <div id="roomEntrance">
         <div class="entrance-box">
-            <h1>🏀 경기 관리소</h1>
-            <p style="font-size:13px; color:#bdc3c7;">생성하거나 참가할 경기 코드를 입력하세요.<br>(예: 경기1, 경기2, 101호 등)</p>
-            <input type="text" id="roomCodeInput" placeholder="경기 입장 코드 입력" onkeydown="if(event.key==='Enter') submitRoomCode()">
-            <button onclick="submitRoomCode()">서버 경기망 접속</button>
+            <h1>🏀 경기 관리 연동소</h1>
+            
+            <div class="input-group">
+                <label for="roomCodeSelect">경기 구역 지정</label>
+                <select id="roomCodeSelect">
+                    <option value="0001">0001호 경기 코트</option>
+                    <option value="0002">0002호 경기 코트</option>
+                </select>
+            </div>
+
+            <div class="input-group">
+                <label for="roomUserNameInput">유저 참관명 (본인 실명)</label>
+                <input type="text" id="roomUserNameInput" placeholder="예: 홍길동" style="width:100%;">
+            </div>
+
+            <div class="input-group">
+                <label for="roomUserPasswordInput">접속 비밀번호 (숫자 4자리)</label>
+                <input type="password" id="roomUserPasswordInput" maxlength="4" placeholder="••••" style="width:100%;">
+            </div>
+
+            <button onclick="submitRoomAuth()">경기 데이터망 동기화</button>
         </div>
     </div>
 
@@ -334,7 +215,7 @@
         <button id="startBtn" onclick="startGame()" disabled>[시작] START</button>
         <button id="pauseBtn" onclick="togglePause()" disabled>PAUSE</button>
         <button id="resetBtn" onclick="triggerManualReset()" disabled>RESET</button>
-        <span id="statusText" style="color: #f1c40f; margin-left: 5px;">[관전자 모드] 코드를 입력하세요.</span>
+        <span id="statusText" style="color: #f1c40f; margin-left: 5px;">[관전자 모드] 데이터를 입력하세요.</span>
     </div>
     
     <div id="mainLayout">
@@ -354,9 +235,7 @@
             <div id="cutIn">디펜스!!</div>
             <div id="miniGameUI">
                 <div id="miniGameTitle" style="font-weight:bold; font-size:14px;">🔥 화면(UI)을 마구 연타하세요!! 🔥</div>
-                <div class="progress-bar">
-                    <div id="progress"></div>
-                </div>
+                <div class="progress-bar"><div id="progress"></div></div>
                 <div id="miniGameVS" style="font-size:11px; margin-top:5px; color:#ccc;">수비수 VS 공격수</div>
             </div>
             <canvas id="gameCanvas" width="1000" height="500" tabindex="1"></canvas>
@@ -379,15 +258,11 @@
 
     <div id="globalDefenseLockUntilZone">
         <div id="cooldownTitle">⚠️ 디펜스 쿨타임 진행 중!</div>
-        <div class="cooldown-progress-container">
-            <div id="cooldownProgressFiller"></div>
-        </div>
+        <div class="cooldown-progress-container"><div id="cooldownProgressFiller"></div></div>
     </div>
 
     <div id="mobileController">
-        <div class="v-joystick-container" id="vJoystickContainer">
-            <div class="v-joystick-stick" id="vJoystickStick"></div>
-        </div>
+        <div class="v-joystick-container" id="vJoystickContainer"><div class="v-joystick-stick" id="vJoystickStick"></div></div>
         <div class="v-buttons-grid">
             <div class="v-btn btn-action-grab" id="vBtnGrab">GRAB</div>
             <div class="v-btn btn-action-def" id="vBtnDef">DEF</div>
@@ -399,12 +274,8 @@
 <script>
 const socket = io();
 let targetRoomId = null;
-
-let myUserToken = localStorage.getItem("basketball_user_token");
-if (!myUserToken) {
-    myUserToken = "tk_" + Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
-    localStorage.setItem("basketball_user_token", myUserToken);
-}
+let myProfileName = "";
+let myProfilePassword = "";
 
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
@@ -427,73 +298,73 @@ const cooldownProgressFiller = document.getElementById("cooldownProgressFiller")
 let isReferee = false; 
 let myDirectorName = ""; 
 
-let scoreBlue = 0;
-let scoreRed = 0;
-let teamBlueName = "TEAM BLUE";
-let teamRedName = "TEAM RED";
-
-let maxBluePlayers = 5;
-let maxRedPlayers = 5;
+let scoreBlue = 0; let scoreRed = 0;
+let teamBlueName = "TEAM BLUE"; let teamRedName = "TEAM RED";
+let maxBluePlayers = 5; let maxRedPlayers = 5;
 
 let gameState = "SETUP"; 
-let miniGameGauge = 50;    
-let miniGameTimer = 0;
-let activeDefender = null;
-let activeAttacker = null;
-
+let miniGameGauge = 50; let miniGameTimer = 0;
+let activeDefender = null; let activeAttacker = null;
 let globalDefenseLockUntil = 0; 
 
 let myControllingPlayer = null; 
 let keys = {};
 const registeredNames = new Set();
 
-let mobileMoveX = 0;
-let mobileMoveY = 0;
-
+let mobileMoveX = 0; let mobileMoveY = 0;
 let lastTime = performance.now();
 let loopStarted = false;
 
 const court = {
-    width: canvas.width,
-    height: canvas.height,
+    width: canvas.width, height: canvas.height,
     leftGoal: { x: 50, y: 250, radius: 20 },
     rightGoal: { x: 950, y: 250, radius: 20 }
 };
 
 const onlineScheme = { up: 'w', down: 's', left: 'a', right: 'd', grab: 'e', pass: 'shift', shoot: ' ' };
 
-// 🚪 방 코드 제출 및 입장 처리 함수
-function submitRoomCode() {
-    const input = document.getElementById("roomCodeInput");
-    const code = input.value.trim();
-    if(!code) {
-        alert("입장 코드를 입력해 주세요!");
+// 🚪 방 인증 처리 및 유저 동기화 정보 취합 제출 함수
+function submitRoomAuth() {
+    const rCode = document.getElementById("roomCodeSelect").value;
+    const uName = document.getElementById("roomUserNameInput").value.trim();
+    const uPass = document.getElementById("roomUserPasswordInput").value.trim();
+
+    if(!uName) { alert("유저 참관명을 입력해 주세요!"); return; }
+    if(!uPass || uPass.length !== 4 || isNaN(uPass)) { alert("숫자 4자리의 비밀번호를 정확히 입력해 주세요!"); return; }
+
+    targetRoomId = rCode;
+    myProfileName = uName;
+    myProfilePassword = uPass;
+
+    console.log("[클라이언트] 서버 세션 동기화 검증 통신 시작");
+    socket.emit('joinRoom', { roomId: targetRoomId, userName: myProfileName, password: myProfilePassword });
+}
+
+// 인증 결과 리스너
+socket.on('authResult', (res) => {
+    if(!res.success) {
+        alert(res.message);
         return;
     }
-    targetRoomId = code;
-    console.log("[클라이언트] 입력한 방 코드로 접속 시도:", targetRoomId);
-    
-    // UI 전환 가시화 확보
+
+    // 로그인 성공 시 UI 기시성 전환
     document.getElementById("roomEntrance").style.display = "none";
     document.getElementById("lobby").style.display = "flex";
     document.getElementById("mainLayout").style.display = "flex";
     document.getElementById("ui").style.display = "flex";
-    document.getElementById("roomInfoBadge").innerText = `🏠 경기 코드: ${targetRoomId}`;
+    document.getElementById("roomInfoBadge").innerText = `🏠 경기 코드: ${targetRoomId} [${myProfileName}]`;
     
     if (window.matchMedia("(pointer: coarse)").matches) {
         document.getElementById("mobileController").classList.add("active");
         document.body.style.paddingBottom = "180px";
     }
-
-    // 서버에 해당 방 입장 소켓 이벤트 전송
-    socket.emit('joinRoom', targetRoomId);
-}
+    canvas.focus();
+});
 
 function requestFullScreen() {
     const docEl = document.documentElement;
     if (docEl.requestFullscreen) { docEl.requestFullscreen(); }
     else if (docEl.webkitRequestFullscreen) { docEl.webkitRequestFullscreen(); }
-    else if (docEl.msRequestFullscreen) { docEl.msRequestFullscreen(); }
 }
 
 class Player {
@@ -501,7 +372,7 @@ class Player {
         this.x = x; this.y = y; this.team = team; this.id = id; this.spawnIndex = spawnIndex;
         this.radius = 16; this.baseSpeed = 210;
         this.color = team === "BLUE" ? "#3498db" : "#e74c3c";
-        this.ownerName = null; this.socketId = null; this.userToken = null;
+        this.ownerName = null; this.socketId = null;
         this.angle = team === "BLUE" ? 0 : Math.PI; this.skillLevel = 5.0;
     }
 
@@ -618,22 +489,24 @@ let activePlayers = [];
 
 function buildActivePlayersPool(preserveNames = true) {
     const backupMap = {};
-    activePlayers.forEach(p => { if (p.ownerName) { backupMap[`${p.team}_${p.id}`] = { ownerName: p.ownerName, socketId: p.socketId, userToken: p.userToken, skillLevel: p.skillLevel }; } });
+    activePlayers.forEach(p => { if (p.ownerName) { backupMap[`${p.team}_${p.id}`] = { ownerName: p.ownerName, socketId: p.socketId, skillLevel: p.skillLevel, x: p.x, y: p.y, angle: p.angle }; } });
     if (!preserveNames) { registeredNames.clear(); }
     activePlayers = [];
     for(let i = 0; i < maxBluePlayers; i++) {
-        let bPos = allSpawnPositions.BLUE[i]; let p = new Player(bPos.x, bPos.y, "BLUE", i+1, i);
+        let bPos = allSpawnPositions.BLUE[i]; 
+        let p = new Player(bPos.x, bPos.y, "BLUE", i+1, i);
         let bk = backupMap[`BLUE_${i+1}`];
-        if (bk && preserveNames) { p.ownerName = bk.ownerName; p.socketId = bk.socketId; p.userToken = bk.userToken; p.skillLevel = bk.skillLevel; registeredNames.add(bk.ownerName); }
+        if (bk && preserveNames) { p.ownerName = bk.ownerName; p.socketId = bk.socketId; p.skillLevel = bk.skillLevel; p.x = bk.x; p.y = bk.y; p.angle = bk.angle; registeredNames.add(bk.ownerName); }
         activePlayers.push(p);
     }
     for(let i = 0; i < maxRedPlayers; i++) {
-        let rPos = allSpawnPositions.RED[i]; let p = new Player(rPos.x, rPos.y, "RED", i+1, i);
+        let rPos = allSpawnPositions.RED[i]; 
+        let p = new Player(rPos.x, rPos.y, "RED", i+1, i);
         let bk = backupMap[`RED_${i+1}`];
-        if (bk && preserveNames) { p.ownerName = bk.ownerName; p.socketId = bk.socketId; p.userToken = bk.userToken; p.skillLevel = bk.skillLevel; registeredNames.add(bk.ownerName); }
+        if (bk && preserveNames) { p.ownerName = bk.ownerName; p.socketId = bk.socketId; p.skillLevel = bk.skillLevel; p.x = bk.x; p.y = bk.y; p.angle = bk.angle; registeredNames.add(bk.ownerName); }
         activePlayers.push(p);
     }
-    const findMySlot = activePlayers.find(p => p.userToken === myUserToken);
+    const findMySlot = activePlayers.find(p => p.ownerName === myProfileName);
     if (findMySlot) { myControllingPlayer = findMySlot; }
     updateAdminDropdown();
 }
@@ -679,7 +552,7 @@ function authReferee() {
     const inputName = document.getElementById("refName").value.trim();
     const inputKey = document.getElementById("refKey").value;
     if (!inputName) { alert("감독 이름을 입력해 주세요!"); return; }
-    if (inputKey === "483010") { socket.emit("syncRegisterDirector", { name: inputName, token: myUserToken }); } 
+    if (inputKey === "483010") { socket.emit("syncRegisterDirector", { name: inputName, token: "DIR_TOKEN_" + myProfileName }); } 
     else { alert("잘못된 심판 코드입니다!"); }
 }
 
@@ -709,9 +582,8 @@ function startGame() {
 }
 
 function triggerManualReset() {
-    if (!isReferee) return;
-    resetBtn.blur();
-    if(confirm("정말로 전체 경기를 처음 상태로 완전히 초기화하시겠습니까?")) { socket.emit("syncResetMatch"); }
+    if (!isReferee) return; resetBtn.blur();
+    if(confirm("정말로 전체 경기를 처음 상태로 완전히 초기화하시겠습니까? 유저 기록도 삭제됩니다.")) { socket.emit("syncResetMatch"); }
 }
 
 function togglePause() {
@@ -780,15 +652,15 @@ canvas.addEventListener("mousedown", e => {
                 const dist = Math.hypot(p.x - mouseX, p.y - mouseY);
                 if (dist < p.radius + 15) {
                     if (!p.ownerName) {
-                        const name = prompt(`[${p.team === "BLUE" ? "블루" : "레드"} ${p.id}번] 유저 이름 입력:`);
-                        if (name && name.trim() !== "") {
-                            const trimmedName = name.trim();
-                            if (registeredNames.has(trimmedName)) { alert("이미 등록된 유저명입니다."); return; }
-                            p.ownerName = trimmedName; p.socketId = socket.id; p.userToken = myUserToken;
-                            myControllingPlayer = p; registeredNames.add(trimmedName);
-                            socket.emit("syncRegisterOwner", { team: p.team, id: p.id, ownerName: trimmedName, userToken: myUserToken });
-                            updateAdminDropdown();
-                        }
+                        if (registeredNames.has(myProfileName)) { alert("이미 한 명의 선수를 전담 마크 등록하셨습니다."); return; }
+                        p.ownerName = myProfileName; p.socketId = socket.id;
+                        myControllingPlayer = p; registeredNames.add(myProfileName);
+                        
+                        socket.emit("syncRegisterOwner", { 
+                            team: p.team, id: p.id, ownerName: myProfileName, 
+                            password: myProfilePassword, x: p.x, y: p.y, angle: p.angle 
+                        });
+                        updateAdminDropdown();
                     } else { alert(`이미 선택 완료된 캐릭터입니다.`); }
                 }
             });
@@ -805,15 +677,15 @@ canvas.addEventListener("touchstart", e => {
         const dist = Math.hypot(p.x - mouseX, p.y - mouseY);
         if (dist < p.radius + 20) {
             if (!p.ownerName) {
-                const name = prompt(`[${p.team === "BLUE" ? "블루" : "레드"} ${p.id}번] 유저 이름 입력:`);
-                if (name && name.trim() !== "") {
-                    const trimmedName = name.trim();
-                    if (registeredNames.has(trimmedName)) { alert("이미 등록된 유저명입니다."); return; }
-                    p.ownerName = trimmedName; p.socketId = socket.id; p.userToken = myUserToken;
-                    myControllingPlayer = p; registeredNames.add(trimmedName);
-                    socket.emit("syncRegisterOwner", { team: p.team, id: p.id, ownerName: trimmedName, userToken: myUserToken });
-                    updateAdminDropdown();
-                }
+                if (registeredNames.has(myProfileName)) { alert("이미 한 명의 선수를 전담 마크 등록하셨습니다."); return; }
+                p.ownerName = myProfileName; p.socketId = socket.id;
+                myControllingPlayer = p; registeredNames.add(myProfileName);
+                
+                socket.emit("syncRegisterOwner", { 
+                    team: p.team, id: p.id, ownerName: myProfileName, 
+                    password: myProfilePassword, x: p.x, y: p.y, angle: p.angle 
+                });
+                updateAdminDropdown();
             }
         }
     });
@@ -859,8 +731,7 @@ const vJoystickStick = document.getElementById("vJoystickStick");
 let joystickActive = false; let joystickStartX = 0; let joystickStartY = 0; const joystickMaxRadius = 40;
 
 vJoystickContainer.addEventListener("touchstart", e => {
-    if (e.touches.length === 0) return;
-    joystickActive = true; const touch = e.touches[0]; const rect = vJoystickContainer.getBoundingClientRect();
+    if (e.touches.length === 0) return; joystickActive = true; const touch = e.touches[0]; const rect = vJoystickContainer.getBoundingClientRect();
     joystickStartX = rect.left + rect.width / 2; joystickStartY = rect.top + rect.height / 2;
 });
 
@@ -950,7 +821,7 @@ function endMiniGame(resultData) {
 }
 
 socket.on("onInitRoomState", (state) => {
-    console.log("[클라이언트] 서버로부터 방 초기 상태 수령 완료", state);
+    console.log("[클라이언트] 초기 정보 로드 성공 및 연동", state);
     
     scoreBlue = state.scoreBlue; scoreRed = state.scoreRed;
     document.getElementById("score1").innerText = scoreBlue; document.getElementById("score2").innerText = scoreRed;
@@ -962,28 +833,36 @@ socket.on("onInitRoomState", (state) => {
 
     if (state.globalDefenseLockUntil) { globalDefenseLockUntil = state.globalDefenseLockUntil; }
     
-    // 플레이어 배치 함수 강제 보장
     buildActivePlayersPool(true);
 
     if (state.registeredOwners && Array.isArray(state.registeredOwners)) {
         state.registeredOwners.forEach(data => {
             const p = activePlayers.find(o => o.team === data.team && o.id === data.id);
             if (p) {
-                p.ownerName = data.ownerName; p.socketId = data.socketId; p.userToken = data.userToken; p.skillLevel = data.skillLevel; registeredNames.add(data.ownerName);
-                if (data.userToken === myUserToken) { myControllingPlayer = p; socket.emit("reconnectPlayer", { userToken: myUserToken }); }
+                p.ownerName = data.ownerName; p.socketId = data.socketId; p.skillLevel = data.skillLevel;
+                // 세션 복구 유저의 위치 및 각도를 서버 백업본 데이터로 강제 할당
+                if (data.x !== undefined) p.x = data.x;
+                if (data.y !== undefined) p.y = data.y;
+                if (data.angle !== undefined) p.angle = data.angle;
+                registeredNames.add(data.ownerName);
             }
         });
     }
+
+    // 나의 슬롯 연동 재확인
+    const findMySlot = activePlayers.find(p => p.ownerName === myProfileName);
+    if (findMySlot) { myControllingPlayer = findMySlot; }
+
     updateAdminDropdown();
     logContainer.innerHTML = ""; if (state.logs) state.logs.forEach(log => appendLogToUI(log));
 
     if (state.directorName) {
-        if (state.directorToken === myUserToken) {
+        if (state.directorToken === "DIR_TOKEN_" + myProfileName) {
             isReferee = true; myDirectorName = state.directorName;
             document.getElementById("directorTitleLabel").innerText = `[감독관: ${myDirectorName}]`;
             document.getElementById("adminSkillZone").style.display = "flex"; document.getElementById("refereeZone").style.display = "none";
             chatInputZone.style.display = "flex"; document.getElementById("teamNameBlueInput").disabled = false; document.getElementById("teamNameRedInput").disabled = false;
-            socket.emit("syncRegisterDirector", { name: myDirectorName, token: myUserToken });
+            socket.emit("syncRegisterDirector", { name: myDirectorName, token: "DIR_TOKEN_" + myProfileName });
         } else { document.getElementById("statusText").innerText = `[관전자 모드] 감독 ${state.directorName}님이 방을 관리 중입니다.`; }
     } else {
         isReferee = false; myDirectorName = ""; document.getElementById("refereeZone").style.display = "flex";
@@ -992,9 +871,7 @@ socket.on("onInitRoomState", (state) => {
     
     gameState = state.gameState; toggleUIVisibility();
     
-    // 게임 루프가 아직 안 켜졌다면 완전히 켜기
     if(!loopStarted) {
-        console.log("[클라이언트] 캔버스 렌더링 루프 가동 시작");
         lastTime = performance.now(); gameLoop(lastTime); loopStarted = true;
     }
 });
@@ -1009,10 +886,10 @@ socket.on("onRegisterOwner", (data) => {
     const p = activePlayers.find(o => o.team === data.team && o.id === data.id);
     if (p) {
         if (p.ownerName) registeredNames.delete(p.ownerName);
-        if (data.ownerName === "") { p.ownerName = null; p.socketId = null; p.userToken = null; p.skillLevel = 5.0; } 
+        if (data.ownerName === "") { p.ownerName = null; p.socketId = null; p.skillLevel = 5.0; } 
         else {
-            p.ownerName = data.ownerName; p.socketId = data.socketId || null; p.userToken = data.userToken || null; registeredNames.add(data.ownerName);
-            if (data.userToken === myUserToken) { myControllingPlayer = p; }
+            p.ownerName = data.ownerName; p.socketId = data.socketId || null; registeredNames.add(data.ownerName);
+            if (data.ownerName === myProfileName) { myControllingPlayer = p; }
         }
     }
     updateAdminDropdown();
@@ -1029,7 +906,7 @@ socket.on("onRegisterDirector", (data) => {
         document.getElementById("teamNameBlueInput").disabled = true; document.getElementById("teamNameRedInput").disabled = true;
         toggleUIVisibility(); return;
     }
-    if (data.directorToken === myUserToken) {
+    if (data.directorToken === "DIR_TOKEN_" + myProfileName) {
         isReferee = true; myDirectorName = data.directorName; document.getElementById("directorTitleLabel").innerText = `[감독관: ${myDirectorName}]`;
         document.getElementById("adminSkillZone").style.display = "flex"; document.getElementById("refereeZone").style.display = "none"; chatInputZone.style.display = "flex";
         document.getElementById("teamNameBlueInput").disabled = false; document.getElementById("teamNameRedInput").disabled = false;

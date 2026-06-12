@@ -48,6 +48,7 @@
         .entrance-box input {
             width: 80%; padding: 12px; font-size: 18px; text-align: center;
             margin: 15px 0; border-radius: 6px; border: none; font-weight: bold;
+            background: #fff; color: #000;
         }
         .entrance-box button {
             width: 85%; padding: 12px; font-size: 16px; background: #e67e22;
@@ -58,7 +59,7 @@
         #lobby {
             margin-top: 10px;
             margin-bottom: 15px;
-            display: flex;
+            display: none; /* 방 입장 전까지 숨김 */
             gap: 12px;
             align-items: center;
             background: #333;
@@ -71,7 +72,6 @@
             width: 95%;
             max-width: 1400px;
             box-sizing: border-box;
-            display: none; /* 방 입장 후 노출 */
         }
         
         /* 메인 레이아웃 초기엔 숨김 */
@@ -277,7 +277,6 @@
         .v-btn.btn-action-def { background: rgba(39, 174, 96, 0.9); border-color: #2ecc71; }
         
         @media (pointer: coarse) {
-            /* 방에 들어간 이후에만 바디 패딩이 적용되도록 나중에 스크립트로 처리 */
             #mobileController.active { display: flex; }
         }
 
@@ -299,7 +298,6 @@
 
     <div id="lobby">
         <div id="roomInfoBadge">🏠 방: 미지정</div>
-
         <button id="fullscreenBtn" onclick="requestFullScreen()">📱 전체화면 켜기</button>
 
         <div id="refereeZone" style="display: flex; gap: 8px; align-items: center;">
@@ -473,8 +471,9 @@ function submitRoomCode() {
         return;
     }
     targetRoomId = code;
+    console.log("[클라이언트] 입력한 방 코드로 접속 시도:", targetRoomId);
     
-    // UI 전환
+    // UI 전환 가시화 확보
     document.getElementById("roomEntrance").style.display = "none";
     document.getElementById("lobby").style.display = "flex";
     document.getElementById("mainLayout").style.display = "flex";
@@ -951,6 +950,8 @@ function endMiniGame(resultData) {
 }
 
 socket.on("onInitRoomState", (state) => {
+    console.log("[클라이언트] 서버로부터 방 초기 상태 수령 완료", state);
+    
     scoreBlue = state.scoreBlue; scoreRed = state.scoreRed;
     document.getElementById("score1").innerText = scoreBlue; document.getElementById("score2").innerText = scoreRed;
     maxBluePlayers = state.maxBluePlayers; maxRedPlayers = state.maxRedPlayers;
@@ -960,17 +961,21 @@ socket.on("onInitRoomState", (state) => {
     document.getElementById("teamLabel1").innerText = teamBlueName; document.getElementById("teamLabel2").innerText = teamRedName;
 
     if (state.globalDefenseLockUntil) { globalDefenseLockUntil = state.globalDefenseLockUntil; }
+    
+    // 플레이어 배치 함수 강제 보장
     buildActivePlayersPool(true);
 
-    state.registeredOwners.forEach(data => {
-        const p = activePlayers.find(o => o.team === data.team && o.id === data.id);
-        if (p) {
-            p.ownerName = data.ownerName; p.socketId = data.socketId; p.userToken = data.userToken; p.skillLevel = data.skillLevel; registeredNames.add(data.ownerName);
-            if (data.userToken === myUserToken) { myControllingPlayer = p; socket.emit("reconnectPlayer", { userToken: myUserToken }); }
-        }
-    });
+    if (state.registeredOwners && Array.isArray(state.registeredOwners)) {
+        state.registeredOwners.forEach(data => {
+            const p = activePlayers.find(o => o.team === data.team && o.id === data.id);
+            if (p) {
+                p.ownerName = data.ownerName; p.socketId = data.socketId; p.userToken = data.userToken; p.skillLevel = data.skillLevel; registeredNames.add(data.ownerName);
+                if (data.userToken === myUserToken) { myControllingPlayer = p; socket.emit("reconnectPlayer", { userToken: myUserToken }); }
+            }
+        });
+    }
     updateAdminDropdown();
-    logContainer.innerHTML = ""; state.logs.forEach(log => appendLogToUI(log));
+    logContainer.innerHTML = ""; if (state.logs) state.logs.forEach(log => appendLogToUI(log));
 
     if (state.directorName) {
         if (state.directorToken === myUserToken) {
@@ -987,7 +992,9 @@ socket.on("onInitRoomState", (state) => {
     
     gameState = state.gameState; toggleUIVisibility();
     
+    // 게임 루프가 아직 안 켜졌다면 완전히 켜기
     if(!loopStarted) {
+        console.log("[클라이언트] 캔버스 렌더링 루프 가동 시작");
         lastTime = performance.now(); gameLoop(lastTime); loopStarted = true;
     }
 });

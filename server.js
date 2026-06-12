@@ -49,17 +49,23 @@ function addLogToRoom(room, type, message) {
 
 io.on('connection', (socket) => {
     let currentRoomId = null;
+    console.log(`[서버] 새로운 소켓 연결 성공: ${socket.id}`);
 
     // 1. 방 접속 요청 처리
     socket.on('joinRoom', (roomId) => {
-        if (!roomId || roomId.trim() === "") return;
+        if (!roomId || roomId.trim() === "") {
+            console.log(`[서버] 잘못된 방 코드 접근 차단`);
+            return;
+        }
         
         currentRoomId = roomId.trim();
         socket.join(currentRoomId);
+        console.log(`[서버] 소켓 [${socket.id}]이 방 [${currentRoomId}]에 입장함`);
 
         // 방이 존재하지 않으면 새로 생성
         if (!rooms[currentRoomId]) {
             rooms[currentRoomId] = createNewRoom(currentRoomId);
+            console.log(`[서버] 새로운 방 생성 완료: ${currentRoomId}`);
         }
 
         const room = rooms[currentRoomId];

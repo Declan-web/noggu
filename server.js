@@ -62,7 +62,7 @@ io.on('connection', (socket) => {
         const password = data.password ? data.password.trim() : "";
 
         if (roomId !== "0001" && roomId !== "0002") {
-            socket.emit('authResult', { success: false, message: "존재하지 않는 경기 코드입니다. (0001 또는 0002 입력)" });
+            socket.emit('authResult', { success: false, isAutoRefresh: data.isAutoRefresh, message: "존재하지 않는 경기 코드입니다. (0001 또는 0002 입력)" });
             return;
         }
 
@@ -80,7 +80,7 @@ io.on('connection', (socket) => {
         if (existingUser) {
             // 이름은 같으나 패스워드가 틀린 경우 검증 예외 처리
             if (existingUser.password !== password) {
-                socket.emit('authResult', { success: false, message: "이미 등록된 이름입니다. 비밀번호를 다시 확인하세요." });
+                socket.emit('authResult', { success: false, isAutoRefresh: data.isAutoRefresh, message: "이미 등록된 이름입니다. 비밀번호를 다시 확인하세요." });
                 socket.leave(currentRoomId);
                 currentRoomId = null;
                 authUserName = null;
@@ -89,11 +89,11 @@ io.on('connection', (socket) => {
             // 패스워드 일치 시 신규 소켓 정보 업데이트 및 보존 처리
             existingUser.socketId = socket.id;
             myAssignedSlot = { team: existingUser.team, id: existingUser.id };
-            addLogToRoom(room, 'system', `[${userName}]님이 새로운 기기로 연결을 복구했습니다.`);
+            addLogToRoom(room, 'system', `[${userName}]님이 게임 세션을 복구(재접속)했습니다.`);
         }
 
         // 인증 통과 신호 발송
-        socket.emit('authResult', { success: true, myAssignedSlot: myAssignedSlot });
+        socket.emit('authResult', { success: true, isAutoRefresh: data.isAutoRefresh, myAssignedSlot: myAssignedSlot });
 
         // 클라이언트 초기 데이터 동기화 전송
         socket.emit('onInitRoomState', {
@@ -292,9 +292,9 @@ io.on('connection', (socket) => {
         const attackerName = attObj ? attObj.ownerName : "공격수";
 
         if (resultData.isDefWin) {
-            addLogToRoom(room, 'defense', `🛡️ [${defenderName}] 수비 성공! [${attackerName}]의 공을 빼앗아 가로챕니다.`);
+            addLogToRoom(room, 'defense', `[${defenderName}] 수비 성공! [${attackerName}]의 공을 빼앗아 가로챕니다.`);
         } else {
-            addLogToRoom(room, 'defense', `⚡ [${attackerName}] 돌파 성공! 수비수 무력화 및 공격 흐름 유지!`);
+            addLogToRoom(room, 'defense', `[${attackerName}] 돌파 성공! 수비수 무력화 및 공격 흐름 유지!`);
         }
     });
 
@@ -303,7 +303,7 @@ io.on('connection', (socket) => {
         if (!currentRoomId || !rooms[currentRoomId]) return;
         const room = rooms[currentRoomId];
         const name = room.directorName || "감독";
-        addLogToRoom(room, 'chat', `📢 [${name}]: ${text}`);
+        addLogToRoom(room, 'chat', `[${name}]: ${text}`);
     });
 
     // 17. 로그 삭제 초기화
@@ -318,7 +318,7 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => {
         if (currentRoomId && rooms[currentRoomId] && authUserName) {
             const room = rooms[currentRoomId];
-            addLogToRoom(room, 'system', `유저 [${authUserName}]님이 창을 닫았거나 네트워크 이탈 상태입니다.`);
+            addLogToRoom(room, 'system', `유저 [${authUserName}]의 연결이 일시단절되었습니다.`);
         }
     });
 });

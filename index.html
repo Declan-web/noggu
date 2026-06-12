@@ -153,18 +153,18 @@
 
     <div id="roomEntrance">
         <div class="entrance-box">
-            <h1>🏀 경기 관리 연동소</h1>
+            <h1>차성 체육관</h1>
             
             <div class="input-group">
                 <label for="roomCodeSelect">경기 구역 지정</label>
                 <select id="roomCodeSelect">
-                    <option value="0001">0001호 경기 코트</option>
-                    <option value="0002">0002호 경기 코트</option>
+                    <option value="0001">1 번 코트</option>
+                    <option value="0002">2 번 코트</option>
                 </select>
             </div>
 
             <div class="input-group">
-                <label for="roomUserNameInput">유저 참관명 (본인 실명)</label>
+                <label for="roomUserNameInput">이름</label>
                 <input type="text" id="roomUserNameInput" placeholder="예: 홍길동" style="width:100%;">
             </div>
 
@@ -178,8 +178,8 @@
     </div>
 
     <div id="lobby">
-        <div id="roomInfoBadge">🏠 방: 미지정</div>
-        <button id="fullscreenBtn" onclick="requestFullScreen()">📱 전체화면 켜기</button>
+        <div id="roomInfoBadge">방: 미지정</div>
+        <button id="fullscreenBtn" onclick="requestFullScreen()">전체화면 켜기</button>
 
         <div id="refereeZone" style="display: flex; gap: 8px; align-items: center;">
             <label for="refName">감독: </label>

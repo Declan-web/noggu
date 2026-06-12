@@ -173,7 +173,7 @@
                 <input type="password" id="roomUserPasswordInput" maxlength="4" placeholder="••••" style="width:100%;">
             </div>
 
-            <button onclick="submitRoomAuth()">경기 데이터망 동기화</button>
+            <button onclick="submitRoomAuth(false)">경기 데이터망 동기화</button>
         </div>
     </div>
 
@@ -323,31 +323,68 @@ const court = {
 
 const onlineScheme = { up: 'w', down: 's', left: 'a', right: 'd', grab: 'e', pass: 'shift', shoot: ' ' };
 
-// 🚪 방 인증 처리 및 유저 동기화 정보 취합 제출 함수
-function submitRoomAuth() {
-    const rCode = document.getElementById("roomCodeSelect").value;
-    const uName = document.getElementById("roomUserNameInput").value.trim();
-    const uPass = document.getElementById("roomUserPasswordInput").value.trim();
+// 🚪 방 인증 및 자동 로그인 연동 처리 함수
+function submitRoomAuth(isAutoRefresh = false) {
+    let rCode, uName, uPass;
 
-    if(!uName) { alert("유저 참관명을 입력해 주세요!"); return; }
-    if(!uPass || uPass.length !== 4 || isNaN(uPass)) { alert("숫자 4자리의 비밀번호를 정확히 입력해 주세요!"); return; }
+    if (isAutoRefresh) {
+        // 새로고침 시 세션 스토리지에서 즉시 복원
+        rCode = sessionStorage.getItem("saved_room_id");
+        uName = sessionStorage.getItem("saved_user_name");
+        uPass = sessionStorage.getItem("saved_password");
+    } else {
+        // 수동 일반 접속 시 입력값 추출
+        rCode = document.getElementById("roomCodeSelect").value;
+        uName = document.getElementById("roomUserNameInput").value.trim();
+        uPass = document.getElementById("roomUserPasswordInput").value.trim();
+
+        if(!uName) { alert("유저 참관명을 입력해 주세요!"); return; }
+        if(!uPass || uPass.length !== 4 || isNaN(uPass)) { alert("숫자 4자리의 비밀번호를 정확히 입력해 주세요!"); return; }
+    }
 
     targetRoomId = rCode;
     myProfileName = uName;
     myProfilePassword = uPass;
 
     console.log("[클라이언트] 서버 세션 동기화 검증 통신 시작");
-    socket.emit('joinRoom', { roomId: targetRoomId, userName: myProfileName, password: myProfilePassword });
+    socket.emit('joinRoom', { 
+        roomId: targetRoomId, 
+        userName: myProfileName, 
+        password: myProfilePassword,
+        isAutoRefresh: isAutoRefresh 
+    });
 }
+
+// 🔄 브라우저 로드 시 새로고침 상태인지 체크하여 자동 로그인 실행
+window.addEventListener("DOMContentLoaded", () => {
+    const savedRoom = sessionStorage.getItem("saved_room_id");
+    const savedName = sessionStorage.getItem("saved_user_name");
+    const savedPass = sessionStorage.getItem("saved_password");
+
+    if (savedRoom && savedName && savedPass) {
+        console.log("[클라이언트] 새로고침 감지: 기존 세션 데이터로 자동 복구 시도");
+        submitRoomAuth(true);
+    }
+});
 
 // 인증 결과 리스너
 socket.on('authResult', (res) => {
     if(!res.success) {
-        alert(res.message);
+        // 자동 재접속 실패 시 스토리지 비우고 로그인 화면 노출
+        if (res.isAutoRefresh) {
+            sessionStorage.clear();
+        } else {
+            alert(res.message);
+        }
         return;
     }
 
-    // 로그인 성공 시 UI 기시성 전환
+    // 로그인 통과 시 세션 저장소에 정보 보존 (새로고침 대응용)
+    sessionStorage.setItem("saved_room_id", targetRoomId);
+    sessionStorage.setItem("saved_user_name", myProfileName);
+    sessionStorage.setItem("saved_password", myProfilePassword);
+
+    // 가시성 전환
     document.getElementById("roomEntrance").style.display = "none";
     document.getElementById("lobby").style.display = "flex";
     document.getElementById("mainLayout").style.display = "flex";
@@ -583,7 +620,10 @@ function startGame() {
 
 function triggerManualReset() {
     if (!isReferee) return; resetBtn.blur();
-    if(confirm("정말로 전체 경기를 처음 상태로 완전히 초기화하시겠습니까? 유저 기록도 삭제됩니다.")) { socket.emit("syncResetMatch"); }
+    if(confirm("정말로 전체 경기를 처음 상태로 완전히 초기화하시겠습니까? 유저 기록과 로컬 자동 로그인 세션이 삭제됩니다.")) { 
+        sessionStorage.clear(); // 완전 리셋 시 브라우저 토큰도 휘발 처리
+        socket.emit("syncResetMatch"); 
+    }
 }
 
 function togglePause() {
@@ -840,7 +880,6 @@ socket.on("onInitRoomState", (state) => {
             const p = activePlayers.find(o => o.team === data.team && o.id === data.id);
             if (p) {
                 p.ownerName = data.ownerName; p.socketId = data.socketId; p.skillLevel = data.skillLevel;
-                // 세션 복구 유저의 위치 및 각도를 서버 백업본 데이터로 강제 할당
                 if (data.x !== undefined) p.x = data.x;
                 if (data.y !== undefined) p.y = data.y;
                 if (data.angle !== undefined) p.angle = data.angle;

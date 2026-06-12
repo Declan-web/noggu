@@ -6,10 +6,12 @@ const path = require('path');
 
 app.use(express.static(path.join(__dirname, '')));
 
-// 🏢 여러 방의 상태를 개별적으로 관리할 객체
-const rooms = {};
+// 🏢 고정된 두 개의 방(0001, 0002) 상태 관리 객체 초기화
+const rooms = {
+    "0001": createNewRoom("0001"),
+    "0002": createNewRoom("0002")
+};
 
-// 특정 방의 초기 상태를 생성하는 함수
 function createNewRoom(roomId) {
     return {
         roomId: roomId,
@@ -23,7 +25,7 @@ function createNewRoom(roomId) {
         directorName: null,
         directorToken: null,
         globalDefenseLockUntil: 0,
-        registeredOwners: [], // { team, id, ownerName, socketId, userToken, skillLevel }
+        registeredOwners: [], // { team, id, ownerName, password, socketId, skillLevel, x, y, angle }
         logs: [],
         miniGameGauge: 50,
         activeDefender: null,
@@ -49,28 +51,51 @@ function addLogToRoom(room, type, message) {
 
 io.on('connection', (socket) => {
     let currentRoomId = null;
-    console.log(`[서버] 새로운 소켓 연결 성공: ${socket.id}`);
+    let authUserName = null;
 
-    // 1. 방 접속 요청 처리
-    socket.on('joinRoom', (roomId) => {
-        if (!roomId || roomId.trim() === "") {
-            console.log(`[서버] 잘못된 방 코드 접근 차단`);
+    console.log(`[서버] 새로운 소켓 연결: ${socket.id}`);
+
+    // 1. 방 접속 및 유저 데이터 대조 인증
+    socket.on('joinRoom', (data) => {
+        const roomId = data.roomId ? data.roomId.trim() : "";
+        const userName = data.userName ? data.userName.trim() : "";
+        const password = data.password ? data.password.trim() : "";
+
+        if (roomId !== "0001" && roomId !== "0002") {
+            socket.emit('authResult', { success: false, message: "존재하지 않는 경기 코드입니다. (0001 또는 0002 입력)" });
             return;
         }
-        
-        currentRoomId = roomId.trim();
-        socket.join(currentRoomId);
-        console.log(`[서버] 소켓 [${socket.id}]이 방 [${currentRoomId}]에 입장함`);
 
-        // 방이 존재하지 않으면 새로 생성
-        if (!rooms[currentRoomId]) {
-            rooms[currentRoomId] = createNewRoom(currentRoomId);
-            console.log(`[서버] 새로운 방 생성 완료: ${currentRoomId}`);
-        }
+        currentRoomId = roomId;
+        authUserName = userName;
+        socket.join(currentRoomId);
 
         const room = rooms[currentRoomId];
+        console.log(`[서버] 유저 [${userName}] 방 [${currentRoomId}] 소켓 연결 수립`);
 
-        // 클라이언트에게 현재 방의 모든 상태 전송
+        // 계정 정보 기반 기존 등록 상태 검색 (디바이스 이전 및 세션 복구 핵심)
+        let existingUser = room.registeredOwners.find(o => o.ownerName === userName);
+        let myAssignedSlot = null;
+
+        if (existingUser) {
+            // 이름은 같으나 패스워드가 틀린 경우 검증 예외 처리
+            if (existingUser.password !== password) {
+                socket.emit('authResult', { success: false, message: "이미 등록된 이름입니다. 비밀번호를 다시 확인하세요." });
+                socket.leave(currentRoomId);
+                currentRoomId = null;
+                authUserName = null;
+                return;
+            }
+            // 패스워드 일치 시 신규 소켓 정보 업데이트 및 보존 처리
+            existingUser.socketId = socket.id;
+            myAssignedSlot = { team: existingUser.team, id: existingUser.id };
+            addLogToRoom(room, 'system', `[${userName}]님이 새로운 기기로 연결을 복구했습니다.`);
+        }
+
+        // 인증 통과 신호 발송
+        socket.emit('authResult', { success: true, myAssignedSlot: myAssignedSlot });
+
+        // 클라이언트 초기 데이터 동기화 전송
         socket.emit('onInitRoomState', {
             scoreBlue: room.scoreBlue,
             scoreRed: room.scoreRed,
@@ -85,13 +110,19 @@ io.on('connection', (socket) => {
             registeredOwners: room.registeredOwners,
             logs: room.logs
         });
-
-        addLogToRoom(room, 'system', `새로운 관전자가 접속했습니다.`);
     });
 
-    // 2. 실시간 캐릭터 이동 동기화
+    // 2. 실시간 캐릭터 이동 동기화 및 서버 내 위치 데이터 즉시 갱신
     socket.on('syncPlayerMove', (data) => {
-        if (!currentRoomId) return;
+        if (!currentRoomId || !rooms[currentRoomId]) return;
+        const room = rooms[currentRoomId];
+        
+        const p = room.registeredOwners.find(o => o.team === data.team && o.id === data.id);
+        if (p) {
+            p.x = data.x;
+            p.y = data.y;
+            p.angle = data.angle;
+        }
         socket.to(currentRoomId).emit('onPlayerMove', data);
     });
 
@@ -122,11 +153,12 @@ io.on('connection', (socket) => {
         }
     });
 
-    // 5. 캐릭터 명단 등록 및 양도
+    // 5. 캐릭터 명단 등록 및 영속 데이터 적재
     socket.on('syncRegisterOwner', (data) => {
         if (!currentRoomId || !rooms[currentRoomId]) return;
         const room = rooms[currentRoomId];
 
+        // 중복 방지 기존 배정 정보 정리
         room.registeredOwners = room.registeredOwners.filter(
             o => !(o.team === data.team && o.id === data.id)
         );
@@ -136,26 +168,19 @@ io.on('connection', (socket) => {
                 team: data.team,
                 id: data.id,
                 ownerName: data.ownerName,
+                password: data.password, // 기기 유실 시 복구 인증용 패스워드
                 socketId: socket.id,
-                userToken: data.userToken,
-                skillLevel: 5.0
+                skillLevel: 5.0,
+                x: data.x || 0,
+                y: data.y || 0,
+                angle: data.angle || 0
             });
             addLogToRoom(room, 'system', `[${data.team}] ${data.id}번에 ${data.ownerName}님이 등록되었습니다.`);
         }
         io.to(currentRoomId).emit('onRegisterOwner', data);
     });
 
-    // 6. 재접속 세션 복구 처리
-    socket.on('reconnectPlayer', (data) => {
-        if (!currentRoomId || !rooms[currentRoomId]) return;
-        const room = rooms[currentRoomId];
-        const p = room.registeredOwners.find(o => o.userToken === data.userToken);
-        if (p) {
-            p.socketId = socket.id;
-        }
-    });
-
-    // 7. 팀 경기력 스킬 수정
+    // 6. 팀 경기력 스킬 수정
     socket.on('syncUpdateSkillLevel', (data) => {
         if (!currentRoomId || !rooms[currentRoomId]) return;
         const room = rooms[currentRoomId];
@@ -167,7 +192,7 @@ io.on('connection', (socket) => {
         }
     });
 
-    // 8. 매치 최대 인원 변경
+    // 7. 매치 최대 인원 변경
     socket.on('syncMatchCapacity', (data) => {
         if (!currentRoomId || !rooms[currentRoomId]) return;
         const room = rooms[currentRoomId];
@@ -176,7 +201,7 @@ io.on('connection', (socket) => {
         io.to(currentRoomId).emit('onMatchCapacityChange', data);
     });
 
-    // 9. 실시간 팀 이름 변경
+    // 8. 실시간 팀 이름 변경
     socket.on('syncLiveTeamName', (data) => {
         if (!currentRoomId || !rooms[currentRoomId]) return;
         const room = rooms[currentRoomId];
@@ -185,7 +210,7 @@ io.on('connection', (socket) => {
         socket.to(currentRoomId).emit('onLiveTeamName', data);
     });
 
-    // 10. 경기 공식 시작
+    // 9. 경기 공식 시작
     socket.on('syncStartGame', (data) => {
         if (!currentRoomId || !rooms[currentRoomId]) return;
         const room = rooms[currentRoomId];
@@ -199,7 +224,7 @@ io.on('connection', (socket) => {
         addLogToRoom(room, 'system', `🏀 경기가 공식적으로 개시되었습니다! 파이팅!`);
     });
 
-    // 11. 일시정지 (PAUSE) 토글
+    // 10. 일시정지 (PAUSE) 토글
     socket.on('syncTogglePause', () => {
         if (!currentRoomId || !rooms[currentRoomId]) return;
         const room = rooms[currentRoomId];
@@ -212,14 +237,14 @@ io.on('connection', (socket) => {
         addLogToRoom(room, 'system', `경기가 일시 정지되거나 해제되었습니다.`);
     });
 
-    // 12. 전체 완전 초기화 (RESET)
+    // 11. 전체 완전 초기화 (RESET) - 기록 전체 삭제
     socket.on('syncResetMatch', () => {
         if (!currentRoomId || !rooms[currentRoomId]) return;
         rooms[currentRoomId] = createNewRoom(currentRoomId);
         io.to(currentRoomId).emit('onResetMatch');
     });
 
-    // 13. 스코어 동기화
+    // 12. 스코어 동기화
     socket.on('syncScore', (data) => {
         if (!currentRoomId || !rooms[currentRoomId]) return;
         const room = rooms[currentRoomId];
@@ -231,7 +256,7 @@ io.on('connection', (socket) => {
         addLogToRoom(room, 'score', `🎉 ${currentScoringTeamName}팀 득점! [${room.scoreBlue} : ${room.scoreRed}]`);
     });
 
-    // 14. 미니게임 발동 시작
+    // 13. 미니게임 발동 시작
     socket.on('syncStartMiniGame', (data) => {
         if (!currentRoomId || !rooms[currentRoomId]) return;
         const room = rooms[currentRoomId];
@@ -243,7 +268,7 @@ io.on('connection', (socket) => {
         io.to(currentRoomId).emit('onStartMiniGame', data);
     });
 
-    // 15. 연타 게이지 실시간 변화 축적
+    // 14. 연타 게이지 실시간 변화 축적
     socket.on('syncMiniGameHit', (gauge) => {
         if (!currentRoomId || !rooms[currentRoomId]) return;
         const room = rooms[currentRoomId];
@@ -251,7 +276,7 @@ io.on('connection', (socket) => {
         socket.to(currentRoomId).emit('onMiniGameGauge', gauge);
     });
 
-    // 16. 미니게임 타임아웃 종료 판정
+    // 15. 미니게임 종료 판정
     socket.on('syncEndMiniGame', (resultData) => {
         if (!currentRoomId || !rooms[currentRoomId]) return;
         const room = rooms[currentRoomId];
@@ -273,7 +298,7 @@ io.on('connection', (socket) => {
         }
     });
 
-    // 17. 감독관 전체 공지 채팅 공지
+    // 16. 감독관 전체 공지 채팅 공지
     socket.on('sendDirectorChat', (text) => {
         if (!currentRoomId || !rooms[currentRoomId]) return;
         const room = rooms[currentRoomId];
@@ -281,7 +306,7 @@ io.on('connection', (socket) => {
         addLogToRoom(room, 'chat', `📢 [${name}]: ${text}`);
     });
 
-    // 18. 로그 삭제 초기화
+    // 17. 로그 삭제 초기화
     socket.on('syncClearLogs', () => {
         if (!currentRoomId || !rooms[currentRoomId]) return;
         const room = rooms[currentRoomId];
@@ -289,19 +314,16 @@ io.on('connection', (socket) => {
         io.to(currentRoomId).emit('onClearLogs');
     });
 
-    // 19. 접속 종료 처리
+    // 18. 접속 끊김 이벤트 핸들링 (기록 보존을 위해 방어 처리만 수행)
     socket.on('disconnect', () => {
-        if (currentRoomId && rooms[currentRoomId]) {
+        if (currentRoomId && rooms[currentRoomId] && authUserName) {
             const room = rooms[currentRoomId];
-            const leftPlayer = room.registeredOwners.find(o => o.socketId === socket.id);
-            if (leftPlayer) {
-                addLogToRoom(room, 'system', `유저 [${leftPlayer.ownerName}]님이 일시적으로 통신망에서 이탈했습니다.`);
-            }
+            addLogToRoom(room, 'system', `유저 [${authUserName}]님이 창을 닫았거나 네트워크 이탈 상태입니다.`);
         }
     });
 });
 
 const PORT = 3000;
 http.listen(PORT, () => {
-    console.log(`다중 방 연동 농구 서버가 포트 ${PORT}에서 작동 중입니다.`);
+    console.log(`기기 변경 연동 및 세션 영속형 농구 서버가 포트 ${PORT}에서 가동 중입니다.`);
 });

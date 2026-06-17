@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>다들 모여!</title>
+    <title>다들 모여! - 멀티 세션 연동 버전</title>
     <style>
         body {
             margin: 0; background-color: #222; color: #fff;
@@ -151,17 +151,17 @@
 
     <div id="roomEntrance">
         <div class="entrance-box">
-            <h1>차성 체육관</h1>
+            <h1>경기 관리 연동소</h1>
             <div class="input-group">
-                <label for="roomCodeSelect">들리지 않아? 사람들의 함성 소리</label>
+                <label for="roomCodeSelect">경기 구역 지정</label>
                 <select id="roomCodeSelect">
-                    <option value="0001">1 번 코트</option>
-                    <option value="0002">2 번 코트</option>
+                    <option value="0001">0001호 경기 코트</option>
+                    <option value="0002">0002호 경기 코트</option>
                 </select>
             </div>
             <div class="input-group">
-                <label for="roomUserNameInput">선수 등록</label>
-                <input type="text" id="roomUserNameInput" placeholder="예: 차형월" style="width:100%;">
+                <label for="roomUserNameInput">유저 참관명 (본인 실명)</label>
+                <input type="text" id="roomUserNameInput" placeholder="예: 홍길동" style="width:100%;">
             </div>
             <div class="input-group">
                 <label for="roomUserPasswordInput">접속 비밀번호 (숫자 4자리)</label>
@@ -183,7 +183,6 @@
         </div>
         
         <div id="adminSkillZone">
-            <label id="directorTitleLabel" style="color: #f1c40f; margin-right: 5px; font-weight: bold;"></label>
             <label>경기력:</label>
             <select id="adminTargetPlayer" onchange="loadTargetSkillLevel()"></select>
             <input type="number" id="adminSkillInput" min="5.0" max="9.9" step="0.1" value="5.0">
@@ -214,12 +213,12 @@
         <div class="side-panel">
             <div class="panel-title">조작키</div>
             <div id="keyGuideList">
-                <div class="key-row"><span>상하좌우 이동</span><span class="key-val">W,A,S,D / 조이스틱</span></div>
+                <div class="key-row"><span>상하좌우 이동</span><span class="key-val">W,A,S,D / 패드</span></div>
                 <div class="key-row"><span>공 줍기</span><span class="key-val">E / GRAB</span></div>
                 <div class="key-row"><span>패스</span><span class="key-val">Shift / PASS</span></div>
                 <div class="key-row"><span>슛</span><span class="key-val">Space / SHOOT</span></div>
                 <div class="key-row"><span>디펜스 시도</span><span class="key-val">좌클릭 / DEF</span></div>
-                <div class="key-row"><span>디펜스 게임</span><span class="key-val">우클릭 연타 / 버튼 연타</span></div>
+                <div class="key-row"><span>디펜스 게임</span><span class="key-val">우클릭 연타</span></div>
             </div>
         </div>
 
@@ -244,7 +243,7 @@
             <div class="panel-title">LOG</div>
             <div id="logContainer"></div>
             <div id="chatInputZone">
-                <input type="text" id="directorChatMsg" placeholder="감독 공지 메시지 입력..." onkeydown="if(event.key==='Enter') sendDirectorChat()">
+                <input type="text" id="directorChatMsg" placeholder="공지 메시지 입력..." onkeydown="if(event.key==='Enter') sendDirectorChat()">
                 <button onclick="sendDirectorChat()" style="padding: 4px 10px; font-size:12px;">전송</button>
             </div>
         </div>
@@ -316,6 +315,8 @@ let mobileMoveX = 0; let mobileMoveY = 0;
 let lastTime = performance.now();
 let loopStarted = false;
 
+const isMobileDevice = window.matchMedia("(pointer: coarse)").matches;
+
 const court = {
     width: canvas.width, height: canvas.height,
     leftGoal: { x: 50, y: 250, radius: 15 },
@@ -359,7 +360,7 @@ socket.on('authResult', (res) => {
     document.getElementById("mainLayout").style.display = "flex";
     document.getElementById("ui").style.display = "flex";
     document.getElementById("roomInfoBadge").innerText = `방: ${targetRoomId} [${myProfileName}]`;
-    if (window.matchMedia("(pointer: coarse)").matches) { document.getElementById("mobileController").classList.add("active"); document.body.style.paddingBottom = "180px"; }
+    if (isMobileDevice) { document.getElementById("mobileController").classList.add("active"); document.body.style.paddingBottom = "180px"; }
     canvas.focus();
 });
 
@@ -603,7 +604,15 @@ function sendDirectorChat() {
     if(!text.trim()) return; socket.emit('sendDirectorChat', text); input.value = ""; canvas.focus();
 }
 
+// 📌 LOG 필터링: 감독 부임, 경기력 변화 등 '감독' 관련 시스템 알림을 원천 제거
 function appendLogToUI(log) {
+    if (!log || !log.message) return;
+    
+    // '감독' 단어나 경기력 변경 문구가 감지되면 기록을 아예 무시함
+    if (log.message.includes("감독") || log.message.includes("경기력")) {
+        return;
+    }
+
     const logItem = document.createElement("div"); logItem.className = `log-item log-type-${log.type}`;
     const timeSpan = document.createElement("span"); timeSpan.className = "log-time"; timeSpan.innerText = `[${log.timestamp}]`;
     const msgSpan = document.createElement("span"); msgSpan.innerText = log.message;
@@ -611,7 +620,7 @@ function appendLogToUI(log) {
     logContainer.scrollTop = logContainer.scrollHeight;
 }
 
-// 📌 마우스 우클릭 시 뜨는 브라우저 메뉴 기본동작 원천 차단 (우클릭 연타 기능 활성화용)
+// 📌 브라우저 우클릭 메뉴 팝업 차단 (PC 우클릭 연타용 핵심 기초 환경)
 document.addEventListener("contextmenu", e => { e.preventDefault(); });
 canvas.addEventListener("contextmenu", e => { e.preventDefault(); });
 document.getElementById("gameContainer").addEventListener("contextmenu", e => { e.preventDefault(); });
@@ -620,7 +629,6 @@ function processMiniGameTap() {
     if (gameState !== "MINIGAME" || !myControllingPlayer) return;
     const p = myControllingPlayer;
     
-    // [수비수 vs 공격수] 연타 지분 조율 연산 서버에 통보
     if (activeDefender && p.team === activeDefender.team && p.id === activeDefender.id) {
         socket.emit("syncMiniGameHit", "DEFENDER");
     } 
@@ -635,7 +643,7 @@ miniTapButton.addEventListener("click", e => { e.preventDefault(); e.stopPropaga
 canvas.addEventListener("mousedown", e => {
     canvas.focus();
     
-    // 🖱 컴퓨터 우클릭 연타 복원 (미니게임 도중 마우스 우클릭 입력 시 연타 판정 실행)
+    // 🖱 [PC 전용 우클릭 연타] 미니게임 도중 우클릭 입력 시 연타 신호 처리
     if (gameState === "MINIGAME") {
         e.preventDefault();
         if (e.button === 2) { processMiniGameTap(); }
@@ -693,7 +701,7 @@ window.addEventListener("keydown", e => {
     const key = e.key.toLowerCase(); keys[key] = true;
     if (e.key === " " || e.key === "Enter" || e.key.toLowerCase() === "shift") { e.preventDefault(); }
     
-    // 미니게임 키보드 연타 지원 복구
+    // 미니게임 키보드 연타 분기 유지
     if (gameState === "MINIGAME") { if(key === 'e' || e.key === " ") { processMiniGameTap(); } return; }
     if (gameState === "PAUSE") return;
 
@@ -752,7 +760,7 @@ vJoystickContainer.addEventListener("touchend", resetJoystick); vJoystickContain
 
 document.getElementById("vBtnGrab").addEventListener("touchstart", e => { e.preventDefault(); if (gameState === "PLAYING" && myControllingPlayer) checkManualBallGrab(myControllingPlayer); });
 
-// 📱 [모바일 DEF 즉시종료 원천 수정 패치] 이벤트 중복 전달을 확실히 막아 터치 튕김을 막습니다.
+// 📱 [모바일 DEF 즉시 튕김 버그 수정] 이벤트 래핑 버블링 차단 및 다중 감지 완전 분할
 document.getElementById("vBtnDef").addEventListener("touchstart", e => { 
     e.preventDefault(); 
     e.stopPropagation(); 
@@ -835,16 +843,17 @@ function startMiniGameUI(data) {
     const amIDefender = (myControllingPlayer && myControllingPlayer.team === data.defTeam && myControllingPlayer.id === data.defId);
     const amIAttacker = (myControllingPlayer && myControllingPlayer.team === data.attTeam && myControllingPlayer.id === data.attId);
     
-    if (amIDefender || amIAttacker) {
+    // 📱 PC/모바일 환경 판별에 따라 PUSH 버튼 노출 여부 결정
+    if ((amIDefender || amIAttacker) && isMobileDevice) {
         miniGameClickZone.style.display = "block";
-        miniTapButton.innerText = "PUSH!!"; // 이전 버전 UI 텍스트 명화 복구
+        miniTapButton.innerText = "PUSH!!";
     } else {
         miniGameClickZone.style.display = "none";
     }
 
     updateGaugeDisplay(miniGameGauge);
     miniGameUI.style.display = "block";
-    cutIn.innerText = "디펜스!!"; // 이전 컷인 문구 복원
+    cutIn.innerText = "디펜스!!"; 
     cutIn.classList.add("active"); setTimeout(() => { cutIn.classList.remove("active"); }, 900);
 }
 
@@ -859,7 +868,7 @@ function endMiniGame(resultData) {
     gameState = "PLAYING"; miniGameUI.style.display = "none"; miniGameClickZone.style.display = "none";
     if (resultData.holderId) { ball.holder = activePlayers.find(p => p.team === resultData.holderTeam && p.id === resultData.holderId); } else { ball.holder = null; }
     if (resultData.globalDefenseLockUntil) { globalDefenseLockUntil = resultData.globalDefenseLockUntil; }
-    cutIn.innerText = resultData.isDefWin ? "수비 성공!" : "수비 실패!"; // 이전 버전 복원
+    cutIn.innerText = resultData.isDefWin ? "수비 성공!" : "수비 실패!"; 
     cutIn.classList.add("active"); setTimeout(() => { cutIn.classList.remove("active"); }, 1100);
 }
 
@@ -890,14 +899,14 @@ socket.on("onInitRoomState", (state) => {
     updateAdminDropdown();
     logContainer.innerHTML = ""; if (state.logs) state.logs.forEach(log => appendLogToUI(log));
 
+    // 📌 상단 뱃지 등 관전자 안내 메시지에서 감독관 이름 및 권한 표시 부분 필터링 및 제거
     if (state.directorName) {
         if (state.directorToken === "DIR_TOKEN_" + myProfileName) {
             isReferee = true; myDirectorName = state.directorName;
-            document.getElementById("directorTitleLabel").innerText = `[감독관: ${myDirectorName}]`;
             document.getElementById("adminSkillZone").style.display = "flex"; document.getElementById("refereeZone").style.display = "none";
             chatInputZone.style.display = "flex"; document.getElementById("teamNameBlueInput").disabled = false; document.getElementById("teamNameRedInput").disabled = false;
             socket.emit("syncRegisterDirector", { name: myDirectorName, token: "DIR_TOKEN_" + myProfileName });
-        } else { document.getElementById("statusText").innerText = `[관전자 모드] 감독 ${state.directorName}님이 방을 관리 중입니다.`; }
+        } else { document.getElementById("statusText").innerText = `[관전자 모드] 매치 진행 상황 실시간 관전 중`; }
     } else {
         isReferee = false; myDirectorName = ""; document.getElementById("refereeZone").style.display = "flex";
         document.getElementById("adminSkillZone").style.display = "none"; chatInputZone.style.display = "none";
@@ -941,10 +950,10 @@ socket.on("onRegisterDirector", (data) => {
         toggleUIVisibility(); return;
     }
     if (data.directorToken === "DIR_TOKEN_" + myProfileName) {
-        isReferee = true; myDirectorName = data.directorName; document.getElementById("directorTitleLabel").innerText = `[감독관: ${myDirectorName}]`;
+        isReferee = true; myDirectorName = data.directorName;
         document.getElementById("adminSkillZone").style.display = "flex"; document.getElementById("refereeZone").style.display = "none"; chatInputZone.style.display = "flex";
         document.getElementById("teamNameBlueInput").disabled = false; document.getElementById("teamNameRedInput").disabled = false;
-    } else { document.getElementById("statusText").innerText = `[관전자 모드] 감독 ${data.directorName}님이 방을 관리 중입니다.`; }
+    } else { document.getElementById("statusText").innerText = `[관전자 모드] 매치 진행 상황 실시간 관전 중`; }
     toggleUIVisibility();
 });
 socket.on("onClearLogs", () => { logContainer.innerHTML = ""; });
@@ -974,7 +983,7 @@ function toggleUIVisibility() {
         else if (gameState === "MINIGAME") { statusText.innerText = "[디펜스 매치] 실시간 경합이 벌어지고 있습니다!"; statusText.style.color = "#f1c40f"; }
         else { statusText.innerText = "[경기 중] 매치 진행 중!"; statusText.style.color = "#2ecc71"; pauseBtn.innerText = "PAUSE"; }
     } else {
-        statusText.innerText = isReferee ? "[대기 모드] 매치 인원을 설정하고 경기를 시작하세요." : "[관전자 모드] 감독 코드를 입력하세요.";
+        statusText.innerText = isReferee ? "[대기 모드] 매치 인원을 설정하고 경기를 시작하세요." : "[관전자 모드] 데이터를 입력하세요.";
         statusText.style.color = "#f1c40f"; document.getElementById("startBtn").disabled = !isReferee; pauseBtn.disabled = true; resetBtn.disabled = !isReferee; pauseBtn.innerText = "PAUSE";
     }
 }

@@ -26,7 +26,7 @@ function createNewRoom(roomId) {
         globalDefenseLockUntil: 0,
         registeredOwners: [],
         logs: [],
-        miniGameGauge: 50,
+        miniGameGauge: 25, // 수비수 기준 게이지 (0 ~ 50), 25로 시작
         activeDefender: null,
         activeAttacker: null
     };
@@ -95,7 +95,6 @@ io.on('connection', (socket) => {
     socket.on('syncPlayerMove', (data) => {
         if (!currentRoomId || !rooms[currentRoomId]) return;
         const room = rooms[currentRoomId];
-        
         if (room.gameState === "MINIGAME") return;
 
         const p = room.registeredOwners.find(o => o.team === data.team && o.id === data.id);
@@ -195,17 +194,25 @@ io.on('connection', (socket) => {
         if (!currentRoomId || !rooms[currentRoomId]) return;
         const room = rooms[currentRoomId];
         room.gameState = "MINIGAME";
-        room.miniGameGauge = 50;
+        room.miniGameGauge = 25; // 50칸 중 각각 25칸씩 공평하게 분배받아 시작
         room.activeDefender = { team: data.defTeam, id: data.defId };
         room.activeAttacker = { team: data.attTeam, id: data.attId };
         io.to(currentRoomId).emit('onStartMiniGame', data);
     });
 
-    socket.on('syncMiniGameHit', (gauge) => {
+    socket.on('syncMiniGameHit', (role) => {
         if (!currentRoomId || !rooms[currentRoomId]) return;
         const room = rooms[currentRoomId];
         if (room.gameState !== "MINIGAME") return;
-        room.miniGameGauge = gauge;
+
+        // 🥊 50개 게이지 중 자신의 게이지 지분을 늘리는 정밀 연산
+        if (role === "DEFENDER") {
+            room.miniGameGauge += 1; // 수비수(시도한 사람)가 누르면 수비수 몫 증가
+            if (room.miniGameGauge > 50) room.miniGameGauge = 50;
+        } else if (role === "ATTACKER") {
+            room.miniGameGauge -= 1; // 공격수(방어하는 사람)가 누르면 수비수 몫을 깎고 본인 몫을 확보
+            if (room.miniGameGauge < 0) room.miniGameGauge = 0;
+        }
         io.to(currentRoomId).emit('onMiniGameGauge', room.miniGameGauge);
     });
 
@@ -224,9 +231,9 @@ io.on('connection', (socket) => {
         const attackerName = attObj ? attObj.ownerName : "공격수";
 
         if (resultData.isDefWin) {
-            addLogToRoom(room, 'defense', `[${defenderName}] 수비 성공! 공을 가로챕니다.`);
+            addLogToRoom(room, 'defense', `[${defenderName}] 수비 성공! (${resultData.defGauge}칸 확보) 공을 탈환합니다.`);
         } else {
-            addLogToRoom(room, 'defense', `[${attackerName}] 돌파 성공! 수비수를 무력화했습니다.`);
+            addLogToRoom(room, 'defense', `[${attackerName}] 방어 성공! (${resultData.attGauge}칸 확보) 돌파를 이어갑니다.`);
         }
         
         room.activeDefender = null;
@@ -256,5 +263,5 @@ io.on('connection', (socket) => {
 
 const PORT = 3000;
 http.listen(PORT, () => {
-    console.log(`기기 변경 연동 및 세션 영속형 농구 서버가 포트 ${PORT}에서 가동 중입니다.`);
+    console.log(`농구 미니게임 서버가 포트 ${PORT}에서 정상 가동 중입니다.`);
 });

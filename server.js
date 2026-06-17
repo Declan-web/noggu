@@ -96,7 +96,6 @@ io.on('connection', (socket) => {
         if (!currentRoomId || !rooms[currentRoomId]) return;
         const room = rooms[currentRoomId];
         
-        // 🚨 중요: 서버에서도 미니게임 도중에는 플레이어 이동 처리를 원천 차단
         if (room.gameState === "MINIGAME") return;
 
         const p = room.registeredOwners.find(o => o.team === data.team && o.id === data.id);
@@ -166,7 +165,7 @@ io.on('connection', (socket) => {
         room.maxBluePlayers = data.maxBluePlayers; room.maxRedPlayers = data.maxRedPlayers;
         room.globalDefenseLockUntil = 0;
         io.to(currentRoomId).emit('onStartGame', data);
-        addLogToRoom(room, 'system', `🏀 경기가 공식적으로 개시되었습니다!`);
+        addLogToRoom(room, 'system', `경기가 공식적으로 개시되었습니다!`);
     });
 
     socket.on('syncTogglePause', () => {
@@ -189,10 +188,9 @@ io.on('connection', (socket) => {
         room.scoreBlue = data.blue; room.scoreRed = data.red;
         socket.to(currentRoomId).emit('onScoreUpdate', data);
         const currentScoringTeamName = data.scoringTeam === "BLUE" ? room.teamBlueName : room.teamRedName;
-        addLogToRoom(room, 'score', `🎉 ${currentScoringTeamName}팀 득점! [${room.scoreBlue} : ${room.scoreRed}]`);
+        addLogToRoom(room, 'score', `${currentScoringTeamName}팀 득점! [${room.scoreBlue} : ${room.scoreRed}]`);
     });
 
-    // 13. 미니게임 발동 시작 (전체 유저 프리징 신호 전송)
     socket.on('syncStartMiniGame', (data) => {
         if (!currentRoomId || !rooms[currentRoomId]) return;
         const room = rooms[currentRoomId];
@@ -200,23 +198,17 @@ io.on('connection', (socket) => {
         room.miniGameGauge = 50;
         room.activeDefender = { team: data.defTeam, id: data.defId };
         room.activeAttacker = { team: data.attTeam, id: data.attId };
-
-        // 룸 내부의 모든 사람들에게 동시 팝업창 표출 및 강제 고정 명령
         io.to(currentRoomId).emit('onStartMiniGame', data);
     });
 
-    // 14. 연타 게이지 실시간 동기화 (오류 수정: 서버가 중간 브릿지가 되어 실시간으로 브로드캐스팅)
     socket.on('syncMiniGameHit', (gauge) => {
         if (!currentRoomId || !rooms[currentRoomId]) return;
         const room = rooms[currentRoomId];
         if (room.gameState !== "MINIGAME") return;
-
         room.miniGameGauge = gauge;
-        // 방에 있는 모든 관전자와 당사자에게 실시간 게이지 변동 상황을 즉각 전달
         io.to(currentRoomId).emit('onMiniGameGauge', room.miniGameGauge);
     });
 
-    // 15. 미니게임 종료 판정
     socket.on('syncEndMiniGame', (resultData) => {
         if (!currentRoomId || !rooms[currentRoomId]) return;
         const room = rooms[currentRoomId];
@@ -232,9 +224,9 @@ io.on('connection', (socket) => {
         const attackerName = attObj ? attObj.ownerName : "공격수";
 
         if (resultData.isDefWin) {
-            addLogToRoom(room, 'defense', `🛡️ [${defenderName}] 수비 성공! 공을 가로챕니다.`);
+            addLogToRoom(room, 'defense', `[${defenderName}] 수비 성공! 공을 가로챕니다.`);
         } else {
-            addLogToRoom(room, 'defense', `⚡ [${attackerName}] 돌파 성공! 수비수를 무력화했습니다.`);
+            addLogToRoom(room, 'defense', `[${attackerName}] 돌파 성공! 수비수를 무력화했습니다.`);
         }
         
         room.activeDefender = null;
@@ -245,7 +237,7 @@ io.on('connection', (socket) => {
         if (!currentRoomId || !rooms[currentRoomId]) return;
         const room = rooms[currentRoomId];
         const name = room.directorName || "감독";
-        addLogToRoom(room, 'chat', `📢 [${name}]: ${text}`);
+        addLogToRoom(room, 'chat', `[${name}]: ${text}`);
     });
 
     socket.on('syncClearLogs', () => {

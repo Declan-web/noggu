@@ -1,266 +1,455 @@
 const express = require('express');
-const app = express();
-const http = require('http').createServer(app);
-const io = require('socket.io')(http);
+const http = require('http');
+const { Server } = require('socket.io');
 const path = require('path');
 
-app.use(express.static(path.join(__dirname, '')));
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server);
 
-const rooms = {
-    "0001": createNewRoom("0001"),
-    "0002": createNewRoom("0002")
-};
+const PORT = 3000;
 
-function createNewRoom(roomId) {
+// 정적 파일 제공 설정
+app.use(express.static(path.join(__dirname)));
+
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+// 경기 구역(방)별 데이터를 저장할 객체
+const rooms = {};
+
+// 초기 방 상태 생성 함수
+function createInitialRoomState() {
     return {
-        roomId: roomId,
+        gameState: "SETUP", // SETUP, PLAYING, MINIGAME, PAUSE
         scoreBlue: 0,
         scoreRed: 0,
         teamBlueName: "TEAM BLUE",
         teamRedName: "TEAM RED",
         maxBluePlayers: 5,
         maxRedPlayers: 5,
-        gameState: "SETUP", // SETUP, PLAYING, MINIGAME, PAUSE
+        registeredOwners: [], // { team, id, ownerName, socketId, skillLevel, x, y, angle }
         directorName: null,
         directorToken: null,
-        globalDefenseLockUntil: 0,
-        registeredOwners: [],
         logs: [],
-        miniGameGauge: 25, // 50칸 중 수비수 기준 지분 (25칸 시작)
+        miniGameGauge: 25,
+        miniGameTimer: 0,
         activeDefender: null,
-        activeAttacker: null
+        activeAttacker: null,
+        globalDefenseLockUntil: 0
     };
 }
 
-function getTimestamp() {
-    const now = new Date();
-    return now.toTimeString().split(' ')[0];
-}
+// 📌 LOG 필터링 함수: 대괄호 속 [감독 이름], 부임, 경기력 변화 패턴 완벽 차단
+function addLogToRoom(room, message, type) {
+    // 정규식을 활용해 대괄호 내부에 '감독'이 들어가거나 '감독', '경기력' 관련 텍스트가 포함된 로그 원천 배제
+    const filterPattern = /\[[^\]]*감독[^\]]*\]|감독|경기력/;
+    if (filterPattern.test(message)) {
+        return; // 조건을 만족하면 로그에 추가하지 않고 함수 종료
+    }
 
-function addLogToRoom(room, type, message) {
-    const logEntry = { timestamp: getTimestamp(), type: type, message: message };
+    const now = new Date();
+    const timestamp = now.toTimeString().split(' ')[0];
+    const logEntry = { timestamp, message, type };
+    
     room.logs.push(logEntry);
-    if (room.logs.length > 40) room.logs.shift();
-    io.to(room.roomId).emit("onNewLog", logEntry);
+    if (room.logs.length > 40) {
+        room.logs.shift();
+    }
+    return logEntry;
 }
 
 io.on('connection', (socket) => {
     let currentRoomId = null;
-    let authUserName = null;
+    let myRegisteredUser = null;
 
+    // 방 접속 요청 처리
     socket.on('joinRoom', (data) => {
-        const roomId = data.roomId ? data.roomId.trim() : "";
-        const userName = data.userName ? data.userName.trim() : "";
-        const password = data.password ? data.password.trim() : "";
-
-        if (roomId !== "0001" && roomId !== "0002") {
-            socket.emit('authResult', { success: false, isAutoRefresh: data.isAutoRefresh, message: "존재하지 않는 경기 코드입니다." });
+        const { roomId, userName, password, isAutoRefresh } = data;
+        
+        if (!roomId || !userName) {
+            socket.emit('authResult', { success: false, message: "올바르지 않은 접근입니다." });
             return;
         }
 
         currentRoomId = roomId;
-        authUserName = userName;
-        socket.join(currentRoomId);
-
-        const room = rooms[currentRoomId];
-        let existingUser = room.registeredOwners.find(o => o.ownerName === userName);
-        let myAssignedSlot = null;
-
-        if (existingUser) {
-            if (existingUser.password !== password) {
-                socket.emit('authResult', { success: false, isAutoRefresh: data.isAutoRefresh, message: "이미 등록된 이름입니다. 비밀번호를 다시 확인하세요." });
-                socket.leave(currentRoomId);
-                currentRoomId = null;
-                authUserName = null;
-                return;
-            }
-            existingUser.socketId = socket.id;
-            myAssignedSlot = { team: existingUser.team, id: existingUser.id };
-            addLogToRoom(room, 'system', `[${userName}]님이 게임 세션을 복구(재접속)했습니다.`);
+        if (!rooms[currentRoomId]) {
+            rooms[currentRoomId] = createInitialRoomState();
         }
 
-        socket.emit('authResult', { success: true, isAutoRefresh: data.isAutoRefresh, myAssignedSlot: myAssignedSlot });
+        const room = rooms[currentRoomId];
+        socket.join(currentRoomId);
 
+        // 이미 접속 기록이 있는 유저인지 확인 (재연결 처리)
+        let existingUser = room.registeredOwners.find(p => p.ownerName === userName);
+        
+        if (existingUser) {
+            // 소켓 ID 갱신 및 재동기화
+            existingUser.socketId = socket.id;
+            myRegisteredUser = existingUser;
+        }
+
+        socket.emit('authResult', { success: true, isAutoRefresh });
+        
+        // 현재 방의 상태 전체를 접속한 클라이언트에게 최초 전송
         socket.emit('onInitRoomState', {
-            scoreBlue: room.scoreBlue, scoreRed: room.scoreRed,
-            maxBluePlayers: room.maxBluePlayers, maxRedPlayers: room.maxRedPlayers,
-            teamBlueName: room.teamBlueName, teamRedName: room.teamRedName,
-            gameState: room.gameState, directorName: room.directorName, directorToken: room.directorToken,
-            globalDefenseLockUntil: room.globalDefenseLockUntil, registeredOwners: room.registeredOwners,
-            logs: room.logs, miniGameGauge: room.miniGameGauge,
-            activeDefender: room.activeDefender, activeAttacker: room.activeAttacker
+            gameState: room.gameState,
+            scoreBlue: room.scoreBlue,
+            scoreRed: room.scoreRed,
+            teamBlueName: room.teamBlueName,
+            teamRedName: room.teamRedName,
+            maxBluePlayers: room.maxBluePlayers,
+            maxRedPlayers: room.maxRedPlayers,
+            registeredOwners: room.registeredOwners,
+            directorName: room.directorName,
+            directorToken: room.directorToken,
+            logs: room.logs,
+            miniGameGauge: room.miniGameGauge,
+            activeDefender: room.activeDefender,
+            activeAttacker: room.activeAttacker,
+            globalDefenseLockUntil: room.globalDefenseLockUntil
         });
     });
 
-    socket.on('syncPlayerMove', (data) => {
-        if (!currentRoomId || !rooms[currentRoomId]) return;
-        const room = rooms[currentRoomId];
-        if (room.gameState === "MINIGAME") return;
-
-        const p = room.registeredOwners.find(o => o.team === data.team && o.id === data.id);
-        if (p) { p.x = data.x; p.y = data.y; p.angle = data.angle; }
-        socket.to(currentRoomId).emit('onPlayerMove', data);
-    });
-
-    socket.on('syncBallAction', (data) => {
-        if (!currentRoomId) return;
-        socket.to(currentRoomId).emit('onBallAction', data);
-    });
-
-    socket.on('syncRegisterDirector', (data) => {
-        if (!currentRoomId || !rooms[currentRoomId]) return;
-        const room = rooms[currentRoomId];
-        if (!room.directorToken || room.directorToken === data.token) {
-            room.directorName = data.name; room.directorToken = data.token;
-            io.to(currentRoomId).emit('onRegisterDirector', { directorName: room.directorName, directorToken: room.directorToken });
-            addLogToRoom(room, 'system', `[${data.name}]님이 경기 감독관으로 부임했습니다.`);
-        }
-    });
-
+    // 선수 등록 처리
     socket.on('syncRegisterOwner', (data) => {
         if (!currentRoomId || !rooms[currentRoomId]) return;
         const room = rooms[currentRoomId];
-        room.registeredOwners = room.registeredOwners.filter(o => !(o.team === data.team && o.id === data.id));
-        if (data.ownerName !== "") {
-            room.registeredOwners.push({
-                team: data.team, id: data.id, ownerName: data.ownerName, password: data.password,
-                socketId: socket.id, skillLevel: 5.0, x: data.x || 0, y: data.y || 0, angle: data.angle || 0
-            });
-            addLogToRoom(room, 'system', `[${data.team}] ${data.id}번에 ${data.ownerName}님이 등록되었습니다.`);
-        }
+        
+        // 중복 등록 방지
+        const isAlreadyRegistered = room.registeredOwners.some(p => p.ownerName === data.ownerName);
+        if (isAlreadyRegistered) return;
+
+        const newPlayer = {
+            team: data.team,
+            id: parseInt(data.id),
+            ownerName: data.ownerName,
+            socketId: socket.id,
+            skillLevel: 5.0,
+            x: data.x,
+            y: data.y,
+            angle: data.angle
+        };
+
+        room.registeredOwners.push(newPlayer);
+        myRegisteredUser = newPlayer;
+
+        const logEntry = addLogToRoom(room, `${data.ownerName} 유저가 [${data.team}] ${data.id}번 선수로 코트에 입장했습니다.`, "chat");
+        
         io.to(currentRoomId).emit('onRegisterOwner', data);
+        if (logEntry) io.to(currentRoomId).emit('onNewLog', logEntry);
     });
 
-    socket.on('syncUpdateSkillLevel', (data) => {
+    // 감독 권한 인증
+    socket.on('syncRegisterDirector', (data) => {
         if (!currentRoomId || !rooms[currentRoomId]) return;
         const room = rooms[currentRoomId];
-        const p = room.registeredOwners.find(o => o.team === data.team && o.id === data.id);
-        if (p) {
-            p.skillLevel = data.skillLevel;
-            io.to(currentRoomId).emit('onUpdateSkillLevel', data);
-            addLogToRoom(room, 'system', `감독 권한으로 [${p.ownerName}]의 경기력이 ${data.skillLevel.toFixed(1)}v로 변경되었습니다.`);
-        }
+
+        room.directorName = data.name;
+        room.directorToken = data.token;
+
+        const logEntry = addLogToRoom(room, `[시스템] ${data.name} 님이 총괄 감독 권한을 획득했습니다.`, "chat");
+
+        io.to(currentRoomId).emit('onRegisterDirector', {
+            directorName: room.directorName,
+            directorToken: room.directorToken
+        });
+        if (logEntry) io.to(currentRoomId).emit('onNewLog', logEntry);
     });
 
+    // 경기 인원 설정 변경
     socket.on('syncMatchCapacity', (data) => {
         if (!currentRoomId || !rooms[currentRoomId]) return;
         const room = rooms[currentRoomId];
-        room.maxBluePlayers = data.blueMax; room.maxRedPlayers = data.redMax;
+
+        room.maxBluePlayers = data.blueMax;
+        room.maxRedPlayers = data.redMax;
+
+        // 초과된 슬롯에 할당되어 있던 유저 목록 제거
+        room.registeredOwners = room.registeredOwners.filter(p => {
+            if (p.team === "BLUE" && p.id > room.maxBluePlayers) return false;
+            if (p.team === "RED" && p.id > room.maxRedPlayers) return false;
+            return true;
+        });
+
         io.to(currentRoomId).emit('onMatchCapacityChange', data);
     });
 
+    // 경기 실시간 팀명 변경
     socket.on('syncLiveTeamName', (data) => {
         if (!currentRoomId || !rooms[currentRoomId]) return;
         const room = rooms[currentRoomId];
-        if (data.team === "BLUE") room.teamBlueName = data.name; else room.teamRedName = data.name;
-        socket.to(currentRoomId).emit('onLiveTeamName', data);
+
+        if (data.team === "BLUE") {
+            room.teamBlueName = data.name;
+        } else {
+            room.teamRedName = data.name;
+        }
+
+        io.to(currentRoomId).emit('onLiveTeamName', data);
     });
 
+    // 경기 시작
     socket.on('syncStartGame', (data) => {
         if (!currentRoomId || !rooms[currentRoomId]) return;
         const room = rooms[currentRoomId];
+
         room.gameState = "PLAYING";
-        room.teamBlueName = data.teamBlueName; room.teamRedName = data.teamRedName;
-        room.maxBluePlayers = data.maxBluePlayers; room.maxRedPlayers = data.maxRedPlayers;
+        room.teamBlueName = data.teamBlueName;
+        room.teamRedName = data.teamRedName;
+        room.maxBluePlayers = data.maxBluePlayers;
+        room.maxRedPlayers = data.maxRedPlayers;
         room.globalDefenseLockUntil = 0;
+
+        const logEntry = addLogToRoom(room, "시작 신호가 울렸습니다! 경기를 시작합니다.", "chat");
+
         io.to(currentRoomId).emit('onStartGame', data);
-        addLogToRoom(room, 'system', `경기가 시작되었습니다. 다들 뛰어!`);
+        if (logEntry) io.to(currentRoomId).emit('onNewLog', logEntry);
     });
 
+    // 일시 정지 토글
     socket.on('syncTogglePause', () => {
         if (!currentRoomId || !rooms[currentRoomId]) return;
         const room = rooms[currentRoomId];
-        room.gameState = (room.gameState === "PLAYING") ? "PAUSE" : "PLAYING";
+
+        if (room.gameState === "PLAYING") {
+            room.gameState = "PAUSE";
+        } else if (room.gameState === "PAUSE") {
+            room.gameState = "PLAYING";
+        }
+
         io.to(currentRoomId).emit('onGameStateChange', { state: room.gameState });
-        addLogToRoom(room, 'system', `경기가 일시 정지되거나 해제되었습니다.`);
     });
 
-    socket.on('syncResetMatch', () => {
+    // 플레이어 이동 동기화
+    socket.on('syncPlayerMove', (data) => {
         if (!currentRoomId || !rooms[currentRoomId]) return;
-        rooms[currentRoomId] = createNewRoom(currentRoomId);
-        io.to(currentRoomId).emit('onResetMatch');
+        const room = rooms[currentRoomId];
+
+        const p = room.registeredOwners.find(o => o.team === data.team && o.id === data.id);
+        if (p) {
+            p.x = data.x;
+            p.y = data.y;
+            p.angle = data.angle;
+            socket.to(currentRoomId).emit('onPlayerMove', data);
+        }
     });
 
+    // 공 상태 변경 동기화 (줍기, 패스, 슛 등)
+    socket.on('syncBallAction', (data) => {
+        if (!currentRoomId || !rooms[currentRoomId]) return;
+        socket.to(currentRoomId).emit('onBallAction', data);
+    });
+
+    // 점수 동기화 및 득점 로그 처리
     socket.on('syncScore', (data) => {
         if (!currentRoomId || !rooms[currentRoomId]) return;
         const room = rooms[currentRoomId];
-        room.scoreBlue = data.blue; room.scoreRed = data.red;
-        socket.to(currentRoomId).emit('onScoreUpdate', data);
-        const currentScoringTeamName = data.scoringTeam === "BLUE" ? room.teamBlueName : room.teamRedName;
-        addLogToRoom(room, 'score', `${currentScoringTeamName}팀 득점! [${room.scoreBlue} : ${room.scoreRed}]`);
+
+        room.scoreBlue = data.blue;
+        room.scoreRed = data.red;
+
+        const scoringTeamName = data.scoringTeam === "BLUE" ? room.teamBlueName : room.teamRedName;
+        const logEntry = addLogToRoom(room, `🎉 슛 성공! [${scoringTeamName}]팀이 2점을 획득했습니다.`, "score");
+
+        io.to(currentRoomId).emit('onScoreUpdate', { blue: room.scoreBlue, red: room.scoreRed });
+        if (logEntry) io.to(currentRoomId).emit('onNewLog', logEntry);
     });
 
+    // 경기력 등급 변경
+    socket.on('syncUpdateSkillLevel', (data) => {
+        if (!currentRoomId || !rooms[currentRoomId]) return;
+        const room = rooms[currentRoomId];
+
+        const p = room.registeredOwners.find(o => o.team === data.team && o.id === data.id);
+        if (p) {
+            p.skillLevel = parseFloat(data.skillLevel);
+            
+            const logEntry = addLogToRoom(room, `[관리] [${data.team}] ${p.ownerName} 선수의 경기력이 ${p.skillLevel.toFixed(1)} 스케일로 조정되었습니다.`, "chat");
+            
+            io.to(currentRoomId).emit('onUpdateSkillLevel', data);
+            if (logEntry) io.to(currentRoomId).emit('onNewLog', logEntry);
+        }
+    });
+
+    // 디펜스 미니게임 시작 조건 발동
     socket.on('syncStartMiniGame', (data) => {
         if (!currentRoomId || !rooms[currentRoomId]) return;
         const room = rooms[currentRoomId];
+
+        if (Date.now() < room.globalDefenseLockUntil) return;
+
         room.gameState = "MINIGAME";
-        room.miniGameGauge = 25; // 50 총량 중 서로 25씩 똑같이 지니고 시작
+        room.miniGameGauge = 25;
+        room.miniGameTimer = 5.0; // 5초 카운트다운 초기화
+        
         room.activeDefender = { team: data.defTeam, id: data.defId };
         room.activeAttacker = { team: data.attTeam, id: data.attId };
+
+        const defUser = room.registeredOwners.find(o => o.team === data.defTeam && o.id === data.defId);
+        const attUser = room.registeredOwners.find(o => o.team === data.attTeam && o.id === data.attId);
+        const defName = defUser ? defUser.ownerName : `선수 ${data.defId}`;
+        const attName = attUser ? attUser.ownerName : `선수 ${data.attId}`;
+
+        const logEntry = addLogToRoom(room, `🔥 [${defName}] 대 [${attName}] 디펜스 경합 경기가 선언되었습니다! (5초간 연타)`, "defense");
+
         io.to(currentRoomId).emit('onStartMiniGame', data);
+        if (logEntry) io.to(currentRoomId).emit('onNewLog', logEntry);
     });
 
+    // 미니게임 실시간 게이지 충전 입력 처리
     socket.on('syncMiniGameHit', (role) => {
         if (!currentRoomId || !rooms[currentRoomId]) return;
         const room = rooms[currentRoomId];
+
         if (room.gameState !== "MINIGAME") return;
 
         if (role === "DEFENDER") {
-            room.miniGameGauge += 1; // 수비수 진영 게이지 획득
-            if (room.miniGameGauge > 50) room.miniGameGauge = 50;
+            room.miniGameGauge += 1;
         } else if (role === "ATTACKER") {
-            room.miniGameGauge -= 1; // 공격수 진영 게이지 획득 (수비수 몫 차감)
-            if (room.miniGameGauge < 0) room.miniGameGauge = 0;
+            room.miniGameGauge -= 1;
         }
+
+        // 게이지 경계치 고정
+        if (room.miniGameGauge < 1) room.miniGameGauge = 1;
+        if (room.miniGameGauge > 49) room.miniGameGauge = 49;
+
         io.to(currentRoomId).emit('onMiniGameGauge', room.miniGameGauge);
     });
 
-    socket.on('syncEndMiniGame', (resultData) => {
+    // 미니게임 경합 판단 종료 처리
+    socket.on('syncEndMiniGame', (data) => {
         if (!currentRoomId || !rooms[currentRoomId]) return;
         const room = rooms[currentRoomId];
+
         room.gameState = "PLAYING";
-        room.globalDefenseLockUntil = Date.now() + 5000; 
+        room.globalDefenseLockUntil = Date.now() + 5000; // 5초 글로벌 쿨타임 발동
 
-        resultData.globalDefenseLockUntil = room.globalDefenseLockUntil;
-        io.to(currentRoomId).emit('onEndMiniGame', resultData);
+        const defUser = room.registeredOwners.find(o => o.team === room.activeDefender.team && o.id === room.activeDefender.id);
+        const attUser = room.registeredOwners.find(o => o.team === room.activeAttacker.team && o.id === room.activeAttacker.id);
+        const defName = defUser ? defUser.ownerName : "수비수";
+        const attName = attUser ? attUser.ownerName : "공격수";
 
-        const defObj = room.registeredOwners.find(o => o.team === resultData.defTeam && o.id === resultData.defId);
-        const attObj = room.registeredOwners.find(o => o.team === resultData.attTeam && o.id === resultData.attId);
-        const defenderName = defObj ? defObj.ownerName : "수비수";
-        const attackerName = attObj ? attObj.ownerName : "공격수";
-
-        if (resultData.isDefWin) {
-            addLogToRoom(room, 'defense', `[${defenderName}] 수비 성공! (${resultData.defGauge}칸 확보) 공을 탈환합니다.`);
+        let message = "";
+        if (data.isDefWin) {
+            message = `🛡 수비 성공! [${defName}] 선수가 공을 빼앗아 가로챘습니다. (수비 득표: ${data.defGauge} vs 공격 득표: ${data.attGauge})`;
         } else {
-            addLogToRoom(room, 'defense', `[${attackerName}] 방어 성공! (${resultData.attGauge}칸 확보) 돌파를 이어갑니다.`);
+            message = `⚡ 수비 실패! [${attName}] 선수가 철벽 방어를 뚫고 드라이브를 유지합니다. (수비 득표: ${data.defGauge} vs 공격 득표: ${data.attGauge})`;
         }
+
+        const logEntry = addLogToRoom(room, message, "defense");
+
+        // 결과 클라이언트에 전송 시 쿨타임 필드 포함 처리
+        data.globalDefenseLockUntil = room.globalDefenseLockUntil;
         
+        io.to(currentRoomId).emit('onEndMiniGame', data);
+        if (logEntry) io.to(currentRoomId).emit('onNewLog', logEntry);
+
         room.activeDefender = null;
         room.activeAttacker = null;
     });
 
+    // 감독 공지 및 채팅 메시지 브로드캐스팅
     socket.on('sendDirectorChat', (text) => {
         if (!currentRoomId || !rooms[currentRoomId]) return;
         const room = rooms[currentRoomId];
-        const name = room.directorName || "감독";
-        addLogToRoom(room, 'chat', `[${name}]: ${text}`);
+
+        const logEntry = addLogToRoom(room, `💬 [공지] ${text}`, "chat");
+        if (logEntry) io.to(currentRoomId).emit('onNewLog', logEntry);
     });
 
+    // 로그 초기화 요청
     socket.on('syncClearLogs', () => {
         if (!currentRoomId || !rooms[currentRoomId]) return;
-        rooms[currentRoomId].logs = [];
+        const room = rooms[currentRoomId];
+        room.logs = [];
         io.to(currentRoomId).emit('onClearLogs');
     });
 
+    // 경기 초기화 및 전체 포맷 처리
+    socket.on('syncResetMatch', () => {
+        if (!currentRoomId || !rooms[currentRoomId]) return;
+        rooms[currentRoomId] = createInitialRoomState();
+        io.to(currentRoomId).emit('onResetMatch');
+    });
+
+    // 소켓 접속 종료 핸들러
     socket.on('disconnect', () => {
-        if (currentRoomId && rooms[currentRoomId] && authUserName) {
+        if (currentRoomId && rooms[currentRoomId] && myRegisteredUser) {
             const room = rooms[currentRoomId];
-            addLogToRoom(room, 'system', `유저 [${authUserName}]의 연결이 일시단절되었습니다.`);
+            // 오프라인 상태가 되었을 때의 예외 안전 조치로 할당 해제 처리
+            room.registeredOwners = room.registeredOwners.filter(p => p.socketId !== socket.id);
+            
+            const logEntry = addLogToRoom(room, `${myRegisteredUser.ownerName} 선수가 경기장망에서 나갔습니다.`, "chat");
+            
+            io.to(currentRoomId).emit('onRegisterOwner', {
+                team: myRegisteredUser.team,
+                id: myRegisteredUser.id,
+                ownerName: ""
+            });
+            if (logEntry) io.to(currentRoomId).emit('onNewLog', logEntry);
         }
     });
 });
 
-const PORT = 3000;
-http.listen(PORT, () => {
-    console.log(`농구 미니게임 서버가 포트 ${PORT}에서 정상 가동 중입니다.`);
+// 타이머 백엔드 정밀 연동 검증용 루프 구현 (디펜스 미니게임 시간 관리 전용)
+setInterval(() => {
+    Object.keys(rooms).forEach(roomId => {
+        const room = rooms[roomId];
+        if (room.gameState === "MINIGAME") {
+            room.miniGameTimer -= 0.05; // 50ms마다 감소
+            if (room.miniGameTimer <= 0) {
+                const defGauge = room.miniGameGauge;
+                const attGauge = 50 - room.miniGameGauge;
+                let isDefWin = defGauge > attGauge;
+
+                if (defGauge === attGauge) {
+                    isDefWin = Math.random() < 0.5;
+                }
+
+                room.gameState = "PLAYING";
+                room.globalDefenseLockUntil = Date.now() + 5000;
+
+                const defUser = room.registeredOwners.find(o => o.team === room.activeDefender.team && o.id === room.activeDefender.id);
+                const attUser = room.registeredOwners.find(o => o.team === room.activeAttacker.team && o.id === room.activeAttacker.id);
+                const defName = defUser ? defUser.ownerName : "수비수";
+                const attName = attUser ? attUser.ownerName : "공격수";
+
+                let message = "";
+                let holderId = null;
+                let holderTeam = null;
+
+                if (isDefWin) {
+                    message = `🛡 수비 성공! [${defName}] 선수가 공을 빼앗아 가로챘습니다. (수비 득표: ${defGauge} vs 공격 득표: ${attGauge})`;
+                    holderId = room.activeDefender.id;
+                    holderTeam = room.activeDefender.team;
+                } else {
+                    message = `⚡ 수비 실패! [${attName}] 선수가 철벽 방어를 뚫고 드라이브를 유지합니다. (수비 득표: ${defGauge} vs 공격 득표: ${attGauge})`;
+                    holderId = room.activeAttacker.id;
+                    holderTeam = room.activeAttacker.team;
+                }
+
+                const logEntry = addLogToRoom(room, message, "defense");
+
+                io.to(roomId).emit('onEndMiniGame', {
+                    isDefWin,
+                    holderId,
+                    holderTeam,
+                    defGauge,
+                    attGauge,
+                    globalDefenseLockUntil: room.globalDefenseLockUntil
+                });
+                
+                if (logEntry) io.to(roomId).emit('onNewLog', logEntry);
+
+                room.activeDefender = null;
+                room.activeAttacker = null;
+            }
+        }
+    });
+}, 50);
+
+server.listen(PORT, () => {
+    console.log(`Basketball Multi-Session Server running on http://localhost:${PORT}`);
 });

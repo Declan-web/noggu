@@ -62,7 +62,6 @@
 
         #gameContainer { position: relative; box-shadow: 0 0 25px rgba(0,0,0,0.7); width: 100%; max-width: 1000px; margin: 0 auto; }
         
-        /* 🎨 업데이트: 코트 기본 배경을 초록색에서 주황색(#d35400)으로 전면 교체 */
         canvas { background-color: #d35400; border: 4px solid #fff; display: block; border-radius: 4px; outline: none; width: 100% !important; height: auto !important; box-sizing: border-box; }
 
         @media (max-width: 1024px) {
@@ -151,7 +150,7 @@
 
     <div id="roomEntrance">
         <div class="entrance-box">
-            <h1>🏀 경기 관리 연동소</h1>
+            <h1>경기 관리 연동소</h1>
             <div class="input-group">
                 <label for="roomCodeSelect">경기 구역 지정</label>
                 <select id="roomCodeSelect">
@@ -172,8 +171,8 @@
     </div>
 
     <div id="lobby">
-        <div id="roomInfoBadge">🏠 방: 미지정</div>
-        <button id="fullscreenBtn" onclick="requestFullScreen()">📱 전체화면 켜기</button>
+        <div id="roomInfoBadge">방: 미지정</div>
+        <button id="fullscreenBtn" onclick="requestFullScreen()">전체화면 켜기</button>
         <div id="refereeZone" style="display: flex; gap: 8px; align-items: center;">
             <label for="refName">감독: </label>
             <input type="text" id="refName" placeholder="감독명" style="width: 70px;">
@@ -226,7 +225,7 @@
         <div id="gameContainer">
             <div id="cutIn">디펜스!!</div>
             <div id="miniGameUI">
-                <div id="miniGameTitle" style="font-weight:bold; font-size:14px;">🔥 화면(UI)을 마구 연타하세요!! 🔥</div>
+                <div id="miniGameTitle" style="font-weight:bold; font-size:14px;">🔥 아래 버튼을 마구 연타하세요!! 🔥</div>
                 <div class="progress-bar"><div id="progress"></div></div>
                 <div id="miniGameVS" style="font-size:11px; margin-top:5px; color:#ccc;">수비수 VS 공격수</div>
                 <div id="miniGameClickZone"><button class="mini-tap-btn" id="miniTapButton">PUSH!!</button></div>
@@ -250,7 +249,7 @@
     </div>
 
     <div id="globalDefenseLockUntilZone">
-        <div id="cooldownTitle">⚠️ 디펜스 쿨타임 진행 중!</div>
+        <div id="cooldownTitle">디펜스 쿨타임 진행 중!</div>
         <div class="cooldown-progress-container"><div id="cooldownProgressFiller"></div></div>
     </div>
 
@@ -312,7 +311,6 @@ let loopStarted = false;
 
 const court = {
     width: canvas.width, height: canvas.height,
-    // 🎯 밸런스 패치: 골대의 판정 범위를 축소하고 가시성이 높도록 림 반지름 조정
     leftGoal: { x: 50, y: 250, radius: 15 },
     rightGoal: { x: 950, y: 250, radius: 15 }
 };
@@ -353,7 +351,7 @@ socket.on('authResult', (res) => {
     document.getElementById("lobby").style.display = "flex";
     document.getElementById("mainLayout").style.display = "flex";
     document.getElementById("ui").style.display = "flex";
-    document.getElementById("roomInfoBadge").innerText = `🏠 경기 코드: ${targetRoomId} [${myProfileName}]`;
+    document.getElementById("roomInfoBadge").innerText = `방: ${targetRoomId} [${myProfileName}]`;
     if (window.matchMedia("(pointer: coarse)").matches) { document.getElementById("mobileController").classList.add("active"); document.body.style.paddingBottom = "180px"; }
     canvas.focus();
 });
@@ -367,9 +365,9 @@ function requestFullScreen() {
 class Player {
     constructor(x, y, team, id, spawnIndex) {
         this.x = x; this.y = y; this.team = team; this.id = id; this.spawnIndex = spawnIndex;
-        // 📉 난이도 조정: 캐릭터 히트박스 크기를 축소 (기존 16 -> 11) 하여 골밑 접근 난이도 상향
         this.radius = 11; 
-        this.baseSpeed = 210;
+        // 📉 밸런스 조정: 캐릭터 기본 이동 속도 추가 하향 (기존 210 -> 150)
+        this.baseSpeed = 150; 
         this.color = team === "BLUE" ? "#3498db" : "#e74c3c";
         this.ownerName = null; this.socketId = null;
         this.angle = team === "BLUE" ? 0 : Math.PI; this.skillLevel = 5.0;
@@ -408,9 +406,7 @@ class Player {
     }
 
     move(dx, dy, dt) {
-        // 🚨 디펜스 미니게임 상태일 때는 전원 강제 정지 및 수동 조작 무시
         if (gameState === "MINIGAME") return;
-
         this.x += dx * this.baseSpeed * dt; this.y += dy * this.baseSpeed * dt;
         this.x = Math.max(this.radius, Math.min(court.width - this.radius, this.x));
         this.y = Math.max(this.radius, Math.min(court.height - this.radius, this.y));
@@ -455,7 +451,6 @@ const ball = {
     },
     checkGoalProbability(scoringTeam) {
         const shooterLv = this.lastShooterSkill || 5.0;
-        // 📉 난이도 조정: 골 득점 성공 기본 확률 및 구간 확률 하향 밸런싱
         let successChance = 0.35;
         if (shooterLv >= 6.0 && shooterLv < 7.0) successChance = 0.45;
         else if (shooterLv >= 7.0 && shooterLv < 8.0) successChance = 0.55;
@@ -584,7 +579,9 @@ function togglePause() { if (!isReferee) return; if (gameState === "SETUP") retu
 function shootAction(player) {
     if (gameState !== "PLAYING") return;
     ball.holder = null; ball.isFlying = true; ball.ignoreWalls = false; ball.isChecking = false;
-    const power = 14; ball.vx = Math.cos(player.angle) * power; ball.vy = Math.sin(player.angle) * power;
+    // 📉 밸런스 조정: 슛 사거리 축소를 위해 날아가는 속도 파워 하향 (기존 14 -> 9)
+    const power = 9; 
+    ball.vx = Math.cos(player.angle) * power; ball.vy = Math.sin(player.angle) * power;
     ball.lastShooterSkill = player.skillLevel || 5.0;
     socket.emit("syncBallAction", { x: ball.x, y: ball.y, vx: ball.vx, vy: ball.vy, holderId: null, isFlying: true, lastShooterSkill: player.skillLevel || 5.0 });
 }
@@ -611,12 +608,10 @@ function appendLogToUI(log) {
 
 document.getElementById("gameContainer").addEventListener("contextmenu", e => { e.preventDefault(); });
 
-// 🔄 수정을 통한 버그 극복: 미니게임 게이지 클릭 연타 시 상태 유실 없이 동기화 연동
 function processMiniGameTap() {
     if (gameState !== "MINIGAME" || !myControllingPlayer) return;
     const p = myControllingPlayer;
     
-    // 수비수가 누르면 파란색 방향(0%)으로, 공격수가 누르면 빨간색 방향(100%)으로 밀어냄
     if (activeDefender && p.team === activeDefender.team && p.id === activeDefender.id) {
         miniGameGauge -= 3.0; if (miniGameGauge < 0) miniGameGauge = 0;
         socket.emit("syncMiniGameHit", miniGameGauge);
@@ -627,19 +622,28 @@ function processMiniGameTap() {
     }
 }
 
-// UI 연타 방식 다각화 (클릭 렉 최소화용 전용 버튼 지원 포함)
 miniGameUI.addEventListener("pointerdown", e => { if(e.target !== miniTapButton) { e.preventDefault(); processMiniGameTap(); } });
 miniTapButton.addEventListener("click", e => { e.preventDefault(); e.stopPropagation(); processMiniGameTap(); });
 
 canvas.addEventListener("mousedown", e => {
     canvas.focus();
-    if (gameState === "MINIGAME") { if (e.button === 2 || e.button === 0) { e.preventDefault(); processMiniGameTap(); } return; }
+    // 🚨 중요 버그 수정: 미니게임 중일 때 캔버스를 임의 클릭하더라도 자동 수비 성공 연산이 트리거되지 않도록 차단
+    if (gameState === "MINIGAME") { 
+        if (e.button === 2 || e.button === 0) { 
+            e.preventDefault(); 
+            processMiniGameTap(); 
+        } 
+        return; 
+    }
+    
     if (e.button === 0) {
         const rect = canvas.getBoundingClientRect();
         const mouseX = ((e.clientX - rect.left) / rect.width) * canvas.width;
         const mouseY = ((e.clientY - rect.top) / rect.height) * canvas.height;
-        if ((gameState === "SETUP" || gameState === "PLAYING") && myControllingPlayer) {
-            if (gameState === "PLAYING") checkDefenseTrigger(myControllingPlayer); return;
+        
+        if (gameState === "PLAYING" && myControllingPlayer) {
+            checkDefenseTrigger(myControllingPlayer); 
+            return;
         }
         if (gameState === "SETUP" && !myControllingPlayer) {
             activePlayers.forEach(p => {
@@ -683,7 +687,6 @@ window.addEventListener("keydown", e => {
     const key = e.key.toLowerCase(); keys[key] = true;
     if (e.key === " " || e.key === "Enter" || e.key.toLowerCase() === "shift") { e.preventDefault(); }
     
-    // 디펜스 미니게임 중에는 연타 전용 조작을 제외한 다른 조작키(패스, 슛, 이동 등) 완전 차단
     if (gameState === "MINIGAME") { if(key === 'e' || e.key === " ") { processMiniGameTap(); } return; }
     if (gameState === "PAUSE") return;
 
@@ -712,7 +715,6 @@ function checkDefenseTrigger(player) {
     if (Date.now() < globalDefenseLockUntil) return;
     const target = ball.holder; const dist = Math.hypot(player.x - target.x, player.y - target.y);
     
-    // 📉 난이도 조정: 무분별한 스틸 난사를 막기 위해 디펜스 발동 가능 사거리를 절반 이하로 축소 (28 -> 13)
     if (dist < player.radius + target.radius + 13) {
         activeDefender = player; activeAttacker = target; miniGameGauge = 50; miniGameTimer = 5.0; gameState = "MINIGAME";
         socket.emit("syncStartMiniGame", { defTeam: player.team, defId: player.id, attTeam: target.team, attId: target.id });
@@ -752,7 +754,7 @@ function gameLoop(currentTime) {
         const now = Date.now();
         if (now < globalDefenseLockUntil) {
             globalDefenseLockUntilZone.style.display = "flex"; const timeLeft = globalDefenseLockUntil - now; const pct = (timeLeft / 5000) * 100;
-            cooldownTitle.innerText = `⚠️ 디펜스 쿨타임 (${(timeLeft/1000).toFixed(1)}초)`; cooldownProgressFiller.style.width = `${pct}%`;
+            cooldownTitle.innerText = `디펜스 쿨타임 (${(timeLeft/1000).toFixed(1)}초)`; cooldownProgressFiller.style.width = `${pct}%`;
         } else { globalDefenseLockUntilZone.style.display = "none"; }
     } else { globalDefenseLockUntilZone.style.display = "none"; }
 
@@ -770,7 +772,6 @@ function gameLoop(currentTime) {
         ball.update(dt);
     }
     else if (gameState === "MINIGAME") {
-        // 🔒 방 모든 유저 대상 프리징: 미니게임 중에는 그 어떤 유저 프레임 움직임 연산도 갱신하지 않고 스톱시킴
         if (isReferee) {
             miniGameTimer -= dt;
             if (miniGameTimer <= 0) {
@@ -791,17 +792,15 @@ function gameLoop(currentTime) {
 }
 
 function drawCourt() {
-    // 🎨 업데이트: 코트 내부 컬러를 오렌지 계열 브릭 농구장 톤(`#e67e22`)으로 묘사하여 가시성 강화
     ctx.fillStyle = "#e67e22"; ctx.fillRect(0, 0, canvas.width, canvas.height); ctx.lineWidth = 3; ctx.strokeStyle = "rgba(255,255,255,0.75)";
     ctx.beginPath(); ctx.moveTo(500, 0); ctx.lineTo(500, 500); ctx.stroke(); ctx.beginPath(); ctx.arc(500, 250, 75, 0, Math.PI * 2); ctx.stroke();
     ctx.strokeRect(0, 0, canvas.width, canvas.height); ctx.fillStyle = "rgba(52, 152, 219, 0.15)"; ctx.fillRect(0, 100, 120, 300); ctx.strokeRect(0, 100, 120, 300);
     ctx.fillStyle = "rgba(231, 76, 60, 0.15)"; ctx.fillRect(880, 100, 120, 300); ctx.strokeRect(880, 100, 120, 300);
     
-    // 🎯 골대 가시성 리밸런싱: 오렌지 코트에서 확 띄도록 백보드는 진블랙, 바스켓 안쪽은 완전 고대비 핫옐로우 림(`#ffea00`) 처리
     ctx.lineWidth = 5; 
-    ctx.strokeStyle = "#111111"; // 백보드 외곽선 느낌의 블랙 배합
+    ctx.strokeStyle = "#111111"; 
     ctx.beginPath(); ctx.arc(court.leftGoal.x, court.leftGoal.y, court.leftGoal.radius, 0, Math.PI * 2); ctx.stroke();
-    ctx.fillStyle = "#ffea00"; ctx.fill(); // 중앙 과녁 가시 인지용 옐로우 도색
+    ctx.fillStyle = "#ffea00"; ctx.fill(); 
     
     ctx.beginPath(); ctx.arc(court.rightGoal.x, court.rightGoal.y, court.rightGoal.radius, 0, Math.PI * 2); ctx.stroke();
     ctx.fillStyle = "#ffea00"; ctx.fill();
@@ -814,9 +813,8 @@ function startMiniGameUI(data) {
     
     const defName = activeDefender?.ownerName || "수비수";
     const attName = activeAttacker?.ownerName || "공격수";
-    document.getElementById("miniGameVS").innerText = `🛡️ [수비] ${defName} VS 🎯 [공격] ${attName}`;
+    document.getElementById("miniGameVS").innerText = `[수비] ${defName} VS [공격] ${attName}`;
     
-    // 👥 관전자 동기화 활성화: 해당 매치의 타겟 당사자들만 입력 버튼을 보여주고 관전자는 버튼 없이 게이지 관람만 유도
     const amIDefender = (myControllingPlayer && myControllingPlayer.team === data.defTeam && myControllingPlayer.id === data.defId);
     const amIAttacker = (myControllingPlayer && myControllingPlayer.team === data.attTeam && myControllingPlayer.id === data.attId);
     
@@ -828,7 +826,7 @@ function startMiniGameUI(data) {
     }
 
     progressBar.style.width = `${miniGameGauge}%`; miniGameUI.style.display = "block";
-    cutIn.innerText = "디펜스 매치!!"; cutIn.classList.add("active"); setTimeout(() => { cutIn.classList.remove("active"); }, 900);
+    cutIn.innerText = "🔥 우클릭을 마구 연타하세요!! 🔥"; cutIn.classList.add("active"); setTimeout(() => { cutIn.classList.remove("active"); }, 900);
 }
 
 function endMiniGame(resultData) {
@@ -839,7 +837,6 @@ function endMiniGame(resultData) {
 }
 
 socket.on("onInitRoomState", (state) => {
-    console.log("[클라이언트] 초기 정보 로드 성공", state);
     scoreBlue = state.scoreBlue; scoreRed = state.scoreRed;
     document.getElementById("score1").innerText = scoreBlue; document.getElementById("score2").innerText = scoreRed;
     maxBluePlayers = state.maxBluePlayers; maxRedPlayers = state.maxRedPlayers;
@@ -939,7 +936,6 @@ socket.on("onResetMatch", () => {
 });
 socket.on("onScoreUpdate", (data) => { scoreBlue = data.blue; scoreRed = data.red; document.getElementById("score1").innerText = scoreBlue; document.getElementById("score2").innerText = scoreRed; });
 
-// 👥 실시간 미니게임 중계 시스템 구현 사항
 socket.on("onStartMiniGame", (data) => { startMiniGameUI(data); });
 socket.on("onMiniGameGauge", (gauge) => { miniGameGauge = gauge; progressBar.style.width = `${miniGameGauge}%`; });
 socket.on("onEndMiniGame", (resultData) => { endMiniGame(resultData); });

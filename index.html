@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>다들 모여!</title>
+    <title>다들 모여! - 멀티 세션 연동 버전</title>
     <style>
         body {
             margin: 0; background-color: #222; color: #fff;
@@ -151,16 +151,16 @@
 
     <div id="roomEntrance">
         <div class="entrance-box">
-            <h1>차성 체육관</h1>
+            <h1>경기 관리 연동소</h1>
             <div class="input-group">
-                <label for="roomCodeSelect">들리지 않아? 사람들의 함성 소</label>
+                <label for="roomCodeSelect">경기 구역 지정</label>
                 <select id="roomCodeSelect">
-                    <option value="0001">1 번 코트</option>
-                    <option value="0002">2 번 코트</option>
+                    <option value="0001">0001호 경기 코트</option>
+                    <option value="0002">0002호 경기 코트</option>
                 </select>
             </div>
             <div class="input-group">
-                <label for="roomUserNameInput">선수 이름 등록</label>
+                <label for="roomUserNameInput">유저 참관명 (본인 실명)</label>
                 <input type="text" id="roomUserNameInput" placeholder="예: 홍길동" style="width:100%;">
             </div>
             <div class="input-group">
@@ -214,19 +214,19 @@
         <div class="side-panel">
             <div class="panel-title">조작키</div>
             <div id="keyGuideList">
-                <div class="key-row"><span>상하좌우 이동</span><span class="key-val">W,A,S,D / 조이스틱</span></div>
+                <div class="key-row"><span>상하좌우 이동</span><span class="key-val">W,A,S,D / 패드</span></div>
                 <div class="key-row"><span>공 줍기</span><span class="key-val">E / GRAB</span></div>
                 <div class="key-row"><span>패스</span><span class="key-val">Shift / PASS</span></div>
                 <div class="key-row"><span>슛</span><span class="key-val">Space / SHOOT</span></div>
                 <div class="key-row"><span>디펜스 시도</span><span class="key-val">좌클릭 / DEF</span></div>
-                <div class="key-row"><span>디펜스 게임</span><span class="key-val">우클릭 / UI 연타</span></div>
+                <div class="key-row"><span>디펜스 게임</span><span class="key-val">우클릭 연타</span></div>
             </div>
         </div>
 
         <div id="gameContainer">
             <div id="cutIn">디펜스!!</div>
             <div id="miniGameUI">
-                <div id="miniGameTitle" style="font-weight:bold; font-size:14px;">🔥 5초 동안 본인 게이지를 넓히세요! 🔥</div>
+                <div id="miniGameTitle" style="font-weight:bold; font-size:14px;">🔥 디펜스 게임 🔥</div>
                 <div class="progress-bar">
                     <div id="progress"></div>
                     <div id="gaugeTextInfo">
@@ -585,7 +585,6 @@ function togglePause() { if (!isReferee) return; if (gameState === "SETUP") retu
 function shootAction(player) {
     if (gameState !== "PLAYING") return;
     ball.holder = null; ball.isFlying = true; ball.ignoreWalls = false; ball.isChecking = false;
-    // 🏀 중앙 던지기 절반 패치 완료 (사거리 파워 4.8 지정)
     const power = 4.8; 
     ball.vx = Math.cos(player.angle) * power; ball.vy = Math.sin(player.angle) * power;
     ball.lastShooterSkill = player.skillLevel || 5.0;
@@ -612,13 +611,16 @@ function appendLogToUI(log) {
     logContainer.scrollTop = logContainer.scrollHeight;
 }
 
+// 📌 마우스 우클릭 시 뜨는 브라우저 메뉴 기본동작 원천 차단 (우클릭 연타 기능 활성화용)
+document.addEventListener("contextmenu", e => { e.preventDefault(); });
+canvas.addEventListener("contextmenu", e => { e.preventDefault(); });
 document.getElementById("gameContainer").addEventListener("contextmenu", e => { e.preventDefault(); });
 
 function processMiniGameTap() {
     if (gameState !== "MINIGAME" || !myControllingPlayer) return;
     const p = myControllingPlayer;
     
-    // ⚔️ [수비수 vs 공격수] 연타에 따른 독립적 본인 구역 게이지 확보 연산 요청
+    // [수비수 vs 공격수] 연타 지분 조율 연산 서버에 통보
     if (activeDefender && p.team === activeDefender.team && p.id === activeDefender.id) {
         socket.emit("syncMiniGameHit", "DEFENDER");
     } 
@@ -632,7 +634,13 @@ miniTapButton.addEventListener("click", e => { e.preventDefault(); e.stopPropaga
 
 canvas.addEventListener("mousedown", e => {
     canvas.focus();
-    if (gameState === "MINIGAME") { e.preventDefault(); return; }
+    
+    // 🖱 컴퓨터 우클릭 연타 복원 (미니게임 도중 마우스 우클릭 입력 시 연타 판정 실행)
+    if (gameState === "MINIGAME") {
+        e.preventDefault();
+        if (e.button === 2) { processMiniGameTap(); }
+        return;
+    }
     
     if (e.button === 0) {
         const rect = canvas.getBoundingClientRect();
@@ -685,6 +693,7 @@ window.addEventListener("keydown", e => {
     const key = e.key.toLowerCase(); keys[key] = true;
     if (e.key === " " || e.key === "Enter" || e.key.toLowerCase() === "shift") { e.preventDefault(); }
     
+    // 미니게임 키보드 연타 지원 복구
     if (gameState === "MINIGAME") { if(key === 'e' || e.key === " ") { processMiniGameTap(); } return; }
     if (gameState === "PAUSE") return;
 
@@ -742,7 +751,16 @@ const resetJoystick = () => { joystickActive = false; mobileMoveX = 0; mobileMov
 vJoystickContainer.addEventListener("touchend", resetJoystick); vJoystickContainer.addEventListener("touchcancel", resetJoystick);
 
 document.getElementById("vBtnGrab").addEventListener("touchstart", e => { e.preventDefault(); if (gameState === "PLAYING" && myControllingPlayer) checkManualBallGrab(myControllingPlayer); });
-document.getElementById("vBtnDef").addEventListener("touchstart", e => { e.preventDefault(); if (gameState === "PLAYING" && myControllingPlayer) checkDefenseTrigger(myControllingPlayer); });
+
+// 📱 [모바일 DEF 즉시종료 원천 수정 패치] 이벤트 중복 전달을 확실히 막아 터치 튕김을 막습니다.
+document.getElementById("vBtnDef").addEventListener("touchstart", e => { 
+    e.preventDefault(); 
+    e.stopPropagation(); 
+    if (gameState === "PLAYING" && myControllingPlayer) {
+        checkDefenseTrigger(myControllingPlayer); 
+    } 
+});
+
 document.getElementById("vBtnPass").addEventListener("touchstart", e => { e.preventDefault(); if (gameState === "PLAYING" && myControllingPlayer && ball.holder && ball.holder.team === myControllingPlayer.team && ball.holder.id === myControllingPlayer.id) { passAction(myControllingPlayer); } });
 document.getElementById("vBtnShoot").addEventListener("touchstart", e => { e.preventDefault(); if (gameState === "PLAYING" && myControllingPlayer && ball.holder && ball.holder.team === myControllingPlayer.team && ball.holder.id === myControllingPlayer.id) { shootAction(myControllingPlayer); } });
 
@@ -773,12 +791,11 @@ function gameLoop(currentTime) {
         if (isReferee) {
             miniGameTimer -= dt;
             if (miniGameTimer <= 0) {
-                // ⚖️ 5초 타임아웃 종료 시점 양측 점수 대결 비교 연산
                 const defGauge = miniGameGauge;
                 const attGauge = 50 - miniGameGauge;
                 let isDefWin = defGauge > attGauge;
                 
-                if (defGauge === attGauge) { isDefWin = Math.random() < 0.5; } // 완전 동점 시 무작위 판정
+                if (defGauge === attGauge) { isDefWin = Math.random() < 0.5; } 
 
                 gameState = "PLAYING";
                 if (isDefWin) {
@@ -820,18 +837,18 @@ function startMiniGameUI(data) {
     
     if (amIDefender || amIAttacker) {
         miniGameClickZone.style.display = "block";
-        miniTapButton.innerText = amIDefender ? "수비 땅따먹기 연타!! (+)" : "공격 땅따먹기 연타!! (-)";
+        miniTapButton.innerText = "PUSH!!"; // 이전 버전 UI 텍스트 명화 복구
     } else {
         miniGameClickZone.style.display = "none";
     }
 
     updateGaugeDisplay(miniGameGauge);
     miniGameUI.style.display = "block";
-    cutIn.innerText = "🔥 5초 대결 개시!! 🔥"; cutIn.classList.add("active"); setTimeout(() => { cutIn.classList.remove("active"); }, 900);
+    cutIn.innerText = "디펜스!!"; // 이전 컷인 문구 복원
+    cutIn.classList.add("active"); setTimeout(() => { cutIn.classList.remove("active"); }, 900);
 }
 
 function updateGaugeDisplay(gaugeValue) {
-    // 수비수 점수 비율 (0 ~ 50칸 중 차지한 양을 %로 가시화)
     const pct = (gaugeValue / 50) * 100;
     progressBar.style.width = `${pct}%`;
     document.getElementById("defGaugeValue").innerText = `수비: ${gaugeValue}`;
@@ -842,7 +859,8 @@ function endMiniGame(resultData) {
     gameState = "PLAYING"; miniGameUI.style.display = "none"; miniGameClickZone.style.display = "none";
     if (resultData.holderId) { ball.holder = activePlayers.find(p => p.team === resultData.holderTeam && p.id === resultData.holderId); } else { ball.holder = null; }
     if (resultData.globalDefenseLockUntil) { globalDefenseLockUntil = resultData.globalDefenseLockUntil; }
-    cutIn.innerText = resultData.isDefWin ? "수비 지분 승리! 스틸!" : "공격 지분 승리! 방어!"; cutIn.classList.add("active"); setTimeout(() => { cutIn.classList.remove("active"); }, 1100);
+    cutIn.innerText = resultData.isDefWin ? "수비 성공!" : "수비 실패!"; // 이전 버전 복원
+    cutIn.classList.add("active"); setTimeout(() => { cutIn.classList.remove("active"); }, 1100);
 }
 
 socket.on("onInitRoomState", (state) => {

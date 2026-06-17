@@ -26,7 +26,7 @@ function createNewRoom(roomId) {
         globalDefenseLockUntil: 0,
         registeredOwners: [],
         logs: [],
-        miniGameGauge: 25, // 수비수 기준 게이지 (0 ~ 50), 25로 시작
+        miniGameGauge: 25, // 50칸 중 수비수 기준 지분 (25칸 시작)
         activeDefender: null,
         activeAttacker: null
     };
@@ -194,7 +194,7 @@ io.on('connection', (socket) => {
         if (!currentRoomId || !rooms[currentRoomId]) return;
         const room = rooms[currentRoomId];
         room.gameState = "MINIGAME";
-        room.miniGameGauge = 25; // 50칸 중 각각 25칸씩 공평하게 분배받아 시작
+        room.miniGameGauge = 25; // 50 총량 중 서로 25씩 똑같이 지니고 시작
         room.activeDefender = { team: data.defTeam, id: data.defId };
         room.activeAttacker = { team: data.attTeam, id: data.attId };
         io.to(currentRoomId).emit('onStartMiniGame', data);
@@ -205,12 +205,11 @@ io.on('connection', (socket) => {
         const room = rooms[currentRoomId];
         if (room.gameState !== "MINIGAME") return;
 
-        // 🥊 50개 게이지 중 자신의 게이지 지분을 늘리는 정밀 연산
         if (role === "DEFENDER") {
-            room.miniGameGauge += 1; // 수비수(시도한 사람)가 누르면 수비수 몫 증가
+            room.miniGameGauge += 1; // 수비수 진영 게이지 획득
             if (room.miniGameGauge > 50) room.miniGameGauge = 50;
         } else if (role === "ATTACKER") {
-            room.miniGameGauge -= 1; // 공격수(방어하는 사람)가 누르면 수비수 몫을 깎고 본인 몫을 확보
+            room.miniGameGauge -= 1; // 공격수 진영 게이지 획득 (수비수 몫 차감)
             if (room.miniGameGauge < 0) room.miniGameGauge = 0;
         }
         io.to(currentRoomId).emit('onMiniGameGauge', room.miniGameGauge);

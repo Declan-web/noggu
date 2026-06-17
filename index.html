@@ -13,7 +13,6 @@
             -webkit-user-select: none; user-select: none;
         }
 
-        /* 🚪 세션 입력용 확장 카드 UI 디자인 */
         #roomEntrance {
             position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
             background: #1a1a1a; display: flex; flex-direction: column;
@@ -25,21 +24,15 @@
             border: 2px solid #f39c12; max-width: 420px; width: 85%;
         }
         .entrance-box h1 { margin-top: 0; color: #f39c12; font-size: 24px; }
-        .input-group {
-            display: flex; flex-direction: column; margin-bottom: 12px; text-align: left;
-        }
-        .input-group label {
-            font-size: 13px; color: #f1c40f; font-weight: bold; margin-bottom: 4px;
-        }
+        .input-group { display: flex; flex-direction: column; margin-bottom: 12px; text-align: left; }
+        .input-group label { font-size: 13px; color: #f1c40f; font-weight: bold; margin-bottom: 4px; }
         .entrance-box input, .entrance-box select {
             width: 100%; padding: 10px; font-size: 16px; text-align: center;
-            border-radius: 6px; border: none; font-weight: bold;
-            background: #fff; color: #000; box-sizing: border-box;
+            border-radius: 6px; border: none; font-weight: bold; background: #fff; color: #000; box-sizing: border-box;
         }
         .entrance-box button {
             width: 100%; padding: 12px; font-size: 16px; background: #e67e22;
-            color: #fff; border: none; border-radius: 6px; font-weight: bold; cursor: pointer;
-            margin-top: 10px;
+            color: #fff; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; margin-top: 10px;
         }
         .entrance-box button:hover { background: #d35400; }
         
@@ -68,6 +61,8 @@
         .side-panel.log-panel { width: 440px; }
 
         #gameContainer { position: relative; box-shadow: 0 0 25px rgba(0,0,0,0.7); width: 100%; max-width: 1000px; margin: 0 auto; }
+        
+        /* 🎨 업데이트: 코트 기본 배경을 초록색에서 주황색(#d35400)으로 전면 교체 */
         canvas { background-color: #d35400; border: 4px solid #fff; display: block; border-radius: 4px; outline: none; width: 100% !important; height: auto !important; box-sizing: border-box; }
 
         @media (max-width: 1024px) {
@@ -103,11 +98,14 @@
             position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
             background: rgba(0,0,0,0.9); padding: 15px 25px; border-radius: 12px;
             border: 3px solid #f1c40f; text-align: center; display: none; z-index: 25;
-            touch-action: none; cursor: pointer; width: 80%; max-width: 320px; box-sizing: border-box;
+            touch-action: none; width: 80%; max-width: 320px; box-sizing: border-box;
         }
         .progress-bar { width: 100%; height: 20px; background-color: #555; border-radius: 10px; overflow: hidden; margin-top: 10px; border: 1px solid #fff; }
         #progress { width: 50%; height: 100%; background: linear-gradient(90deg, #3498db, #e74c3c); transition: width 0.05s linear; }
-        
+        #miniGameClickZone { display: none; margin-top: 12px; }
+        .mini-tap-btn { width: 100%; padding: 10px; background: #e74c3c; color: #fff; font-size: 16px; font-weight: bold; border-radius: 6px; cursor: pointer; border: none; }
+        .mini-tap-btn:active { background: #c0392b; }
+
         #ui { margin-top: 10px; font-size: 24px; font-weight: bold; display: none; gap: 60px; justify-content: center; width: 100%; }
         #adminSkillZone { display: none; align-items: center; gap: 5px; background: #444; padding: 3px 8px; border-radius: 4px; border: 1px solid #666; }
         #pauseBtn { background-color: #34495e; color: #fff; }
@@ -153,34 +151,29 @@
 
     <div id="roomEntrance">
         <div class="entrance-box">
-            <h1>차성 체육관</h1>
-            
+            <h1>🏀 경기 관리 연동소</h1>
             <div class="input-group">
                 <label for="roomCodeSelect">경기 구역 지정</label>
                 <select id="roomCodeSelect">
-                    <option value="0001">1 번 코트</option>
-                    <option value="0002">2 번 코트</option>
+                    <option value="0001">0001호 경기 코트</option>
+                    <option value="0002">0002호 경기 코트</option>
                 </select>
             </div>
-
             <div class="input-group">
-                <label for="roomUserNameInput">이름</label>
+                <label for="roomUserNameInput">유저 참관명 (본인 실명)</label>
                 <input type="text" id="roomUserNameInput" placeholder="예: 홍길동" style="width:100%;">
             </div>
-
             <div class="input-group">
                 <label for="roomUserPasswordInput">접속 비밀번호 (숫자 4자리)</label>
                 <input type="password" id="roomUserPasswordInput" maxlength="4" placeholder="••••" style="width:100%;">
             </div>
-
             <button onclick="submitRoomAuth(false)">경기 데이터망 동기화</button>
         </div>
     </div>
 
     <div id="lobby">
-        <div id="roomInfoBadge">방: 미지정</div>
-        <button id="fullscreenBtn" onclick="requestFullScreen()">전체화면 켜기</button>
-
+        <div id="roomInfoBadge">🏠 방: 미지정</div>
+        <button id="fullscreenBtn" onclick="requestFullScreen()">📱 전체화면 켜기</button>
         <div id="refereeZone" style="display: flex; gap: 8px; align-items: center;">
             <label for="refName">감독: </label>
             <input type="text" id="refName" placeholder="감독명" style="width: 70px;">
@@ -199,7 +192,6 @@
         </div>
 
         <span style="color:#555;">|</span>
-
         <label>팀명: </label>
         <input type="text" id="teamNameBlueInput" value="TEAM BLUE" placeholder="블루팀명" oninput="sendLiveTeamName('BLUE')" disabled>
         <input type="text" id="teamNameRedInput" value="TEAM RED" placeholder="레드팀명" oninput="sendLiveTeamName('RED')" disabled>
@@ -237,6 +229,7 @@
                 <div id="miniGameTitle" style="font-weight:bold; font-size:14px;">🔥 화면(UI)을 마구 연타하세요!! 🔥</div>
                 <div class="progress-bar"><div id="progress"></div></div>
                 <div id="miniGameVS" style="font-size:11px; margin-top:5px; color:#ccc;">수비수 VS 공격수</div>
+                <div id="miniGameClickZone"><button class="mini-tap-btn" id="miniTapButton">PUSH!!</button></div>
             </div>
             <canvas id="gameCanvas" width="1000" height="500" tabindex="1"></canvas>
         </div>
@@ -282,6 +275,8 @@ const ctx = canvas.getContext("2d");
 const cutIn = document.getElementById("cutIn");
 const miniGameUI = document.getElementById("miniGameUI");
 const progressBar = document.getElementById("progress");
+const miniGameClickZone = document.getElementById("miniGameClickZone");
+const miniTapButton = document.getElementById("miniTapButton");
 const statusText = document.getElementById("statusText");
 const pauseBtn = document.getElementById("pauseBtn");
 const resetBtn = document.getElementById("resetBtn");
@@ -317,84 +312,49 @@ let loopStarted = false;
 
 const court = {
     width: canvas.width, height: canvas.height,
-    leftGoal: { x: 50, y: 250, radius: 20 },
-    rightGoal: { x: 950, y: 250, radius: 20 }
+    // 🎯 밸런스 패치: 골대의 판정 범위를 축소하고 가시성이 높도록 림 반지름 조정
+    leftGoal: { x: 50, y: 250, radius: 15 },
+    rightGoal: { x: 950, y: 250, radius: 15 }
 };
 
 const onlineScheme = { up: 'w', down: 's', left: 'a', right: 'd', grab: 'e', pass: 'shift', shoot: ' ' };
 
-// 🚪 방 인증 및 자동 로그인 연동 처리 함수
 function submitRoomAuth(isAutoRefresh = false) {
     let rCode, uName, uPass;
-
     if (isAutoRefresh) {
-        // 새로고침 시 세션 스토리지에서 즉시 복원
         rCode = sessionStorage.getItem("saved_room_id");
         uName = sessionStorage.getItem("saved_user_name");
         uPass = sessionStorage.getItem("saved_password");
     } else {
-        // 수동 일반 접속 시 입력값 추출
         rCode = document.getElementById("roomCodeSelect").value;
         uName = document.getElementById("roomUserNameInput").value.trim();
         uPass = document.getElementById("roomUserPasswordInput").value.trim();
-
         if(!uName) { alert("유저 참관명을 입력해 주세요!"); return; }
         if(!uPass || uPass.length !== 4 || isNaN(uPass)) { alert("숫자 4자리의 비밀번호를 정확히 입력해 주세요!"); return; }
     }
-
-    targetRoomId = rCode;
-    myProfileName = uName;
-    myProfilePassword = uPass;
-
-    console.log("[클라이언트] 서버 세션 동기화 검증 통신 시작");
-    socket.emit('joinRoom', { 
-        roomId: targetRoomId, 
-        userName: myProfileName, 
-        password: myProfilePassword,
-        isAutoRefresh: isAutoRefresh 
-    });
+    targetRoomId = rCode; myProfileName = uName; myProfilePassword = uPass;
+    socket.emit('joinRoom', { roomId: targetRoomId, userName: myProfileName, password: myProfilePassword, isAutoRefresh: isAutoRefresh });
 }
 
-// 🔄 브라우저 로드 시 새로고침 상태인지 체크하여 자동 로그인 실행
 window.addEventListener("DOMContentLoaded", () => {
     const savedRoom = sessionStorage.getItem("saved_room_id");
     const savedName = sessionStorage.getItem("saved_user_name");
     const savedPass = sessionStorage.getItem("saved_password");
-
-    if (savedRoom && savedName && savedPass) {
-        console.log("[클라이언트] 새로고침 감지: 기존 세션 데이터로 자동 복구 시도");
-        submitRoomAuth(true);
-    }
+    if (savedRoom && savedName && savedPass) { submitRoomAuth(true); }
 });
 
-// 인증 결과 리스너
 socket.on('authResult', (res) => {
-    if(!res.success) {
-        // 자동 재접속 실패 시 스토리지 비우고 로그인 화면 노출
-        if (res.isAutoRefresh) {
-            sessionStorage.clear();
-        } else {
-            alert(res.message);
-        }
-        return;
-    }
-
-    // 로그인 통과 시 세션 저장소에 정보 보존 (새로고침 대응용)
+    if(!res.success) { if (res.isAutoRefresh) { sessionStorage.clear(); } else { alert(res.message); } return; }
     sessionStorage.setItem("saved_room_id", targetRoomId);
     sessionStorage.setItem("saved_user_name", myProfileName);
     sessionStorage.setItem("saved_password", myProfilePassword);
 
-    // 가시성 전환
     document.getElementById("roomEntrance").style.display = "none";
     document.getElementById("lobby").style.display = "flex";
     document.getElementById("mainLayout").style.display = "flex";
     document.getElementById("ui").style.display = "flex";
     document.getElementById("roomInfoBadge").innerText = `🏠 경기 코드: ${targetRoomId} [${myProfileName}]`;
-    
-    if (window.matchMedia("(pointer: coarse)").matches) {
-        document.getElementById("mobileController").classList.add("active");
-        document.body.style.paddingBottom = "180px";
-    }
+    if (window.matchMedia("(pointer: coarse)").matches) { document.getElementById("mobileController").classList.add("active"); document.body.style.paddingBottom = "180px"; }
     canvas.focus();
 });
 
@@ -407,7 +367,9 @@ function requestFullScreen() {
 class Player {
     constructor(x, y, team, id, spawnIndex) {
         this.x = x; this.y = y; this.team = team; this.id = id; this.spawnIndex = spawnIndex;
-        this.radius = 16; this.baseSpeed = 210;
+        // 📉 난이도 조정: 캐릭터 히트박스 크기를 축소 (기존 16 -> 11) 하여 골밑 접근 난이도 상향
+        this.radius = 11; 
+        this.baseSpeed = 210;
         this.color = team === "BLUE" ? "#3498db" : "#e74c3c";
         this.ownerName = null; this.socketId = null;
         this.angle = team === "BLUE" ? 0 : Math.PI; this.skillLevel = 5.0;
@@ -421,9 +383,9 @@ class Player {
         const isMe = (myControllingPlayer && myControllingPlayer.team === this.team && myControllingPlayer.id === this.id);
         ctx.save();
         if (this.ownerName) {
-            ctx.strokeStyle = "rgba(255, 242, 0, 0.75)"; ctx.lineWidth = 2.5; ctx.setLineDash([4, 4]);
+            ctx.strokeStyle = "rgba(255, 242, 0, 0.75)"; ctx.lineWidth = 2.0; ctx.setLineDash([4, 4]);
             ctx.beginPath(); ctx.moveTo(this.x, this.y);
-            ctx.lineTo(this.x + Math.cos(this.angle) * 45, this.y + Math.sin(this.angle) * 45);
+            ctx.lineTo(this.x + Math.cos(this.angle) * 35, this.y + Math.sin(this.angle) * 35);
             ctx.stroke();
         }
         ctx.restore();
@@ -432,20 +394,23 @@ class Player {
         if (isMe) { ctx.fillStyle = this.color; } else { ctx.fillStyle = this.team === "BLUE" ? "#1e547b" : "#8a2b21"; }
         ctx.fill();
 
-        if (isMe) { ctx.lineWidth = 4.5; ctx.strokeStyle = "#f1c40f"; } 
+        if (isMe) { ctx.lineWidth = 3.5; ctx.strokeStyle = "#f1c40f"; } 
         else { ctx.lineWidth = 2.0; ctx.strokeStyle = this.ownerName ? "#444444" : "#cccccc"; }
         ctx.stroke(); ctx.closePath();
 
-        ctx.fillStyle = "#fff"; ctx.font = "bold 10px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillStyle = "#fff"; ctx.font = "bold 9px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
         ctx.fillText(this.id, this.x, this.y);
 
         if (this.ownerName) {
-            ctx.fillStyle = isMe ? "#fff" : "#bbbbbb"; ctx.font = isMe ? "bold 12px sans-serif" : "bold 11px sans-serif";
+            ctx.fillStyle = isMe ? "#fff" : "#bbbbbb"; ctx.font = isMe ? "bold 11px sans-serif" : "bold 10px sans-serif";
             ctx.fillText(`${this.ownerName} [${this.skillLevel.toFixed(1)}v]`, this.x, this.y - this.radius - 8);
         }
     }
 
     move(dx, dy, dt) {
+        // 🚨 디펜스 미니게임 상태일 때는 전원 강제 정지 및 수동 조작 무시
+        if (gameState === "MINIGAME") return;
+
         this.x += dx * this.baseSpeed * dt; this.y += dy * this.baseSpeed * dt;
         this.x = Math.max(this.radius, Math.min(court.width - this.radius, this.x));
         this.y = Math.max(this.radius, Math.min(court.height - this.radius, this.y));
@@ -454,7 +419,7 @@ class Player {
 }
 
 const ball = {
-    x: 500, y: 250, radius: 9, vx: 0, vy: 0, holder: null, isFlying: false, ignoreWalls: false, isChecking: false, lastShooterSkill: 5.0,
+    x: 500, y: 250, radius: 8, vx: 0, vy: 0, holder: null, isFlying: false, ignoreWalls: false, isChecking: false, lastShooterSkill: 5.0,
     draw() {
         ctx.beginPath(); ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2); ctx.fillStyle = "#e67e22"; ctx.fill();
         ctx.lineWidth = 1; ctx.strokeStyle = "#000"; ctx.stroke(); ctx.closePath();
@@ -472,12 +437,12 @@ const ball = {
             const distToRight = Math.hypot(this.x - court.rightGoal.x, this.y - court.rightGoal.y);
             const distToLeft = Math.hypot(this.x - court.leftGoal.x, this.y - court.leftGoal.y);
 
-            if (distToRight < court.rightGoal.radius + 25 || distToLeft < court.leftGoal.radius + 25) { this.ignoreWalls = true; } 
+            if (distToRight < court.rightGoal.radius + 20 || distToLeft < court.leftGoal.radius + 20) { this.ignoreWalls = true; } 
             else { this.ignoreWalls = false; this.isChecking = false; }
 
             if (!this.isChecking) {
-                if (distToRight < court.rightGoal.radius + 25) { this.isChecking = true; this.checkGoalProbability("BLUE"); }
-                else if (distToLeft < court.leftGoal.radius + 25) { this.isChecking = true; this.checkGoalProbability("RED"); }
+                if (distToRight < court.rightGoal.radius + 20) { this.isChecking = true; this.checkGoalProbability("BLUE"); }
+                else if (distToLeft < court.leftGoal.radius + 20) { this.isChecking = true; this.checkGoalProbability("RED"); }
             }
             if (Math.abs(this.vx) < 0.3 && Math.abs(this.vy) < 0.3) { this.isFlying = false; this.ignoreWalls = false; this.isChecking = false; }
         }
@@ -490,26 +455,24 @@ const ball = {
     },
     checkGoalProbability(scoringTeam) {
         const shooterLv = this.lastShooterSkill || 5.0;
-        let successChance = 0.50;
-        if (shooterLv >= 6.0 && shooterLv < 7.0) successChance = 0.60;
-        else if (shooterLv >= 7.0 && shooterLv < 8.0) successChance = 0.70;
-        else if (shooterLv >= 8.0 && shooterLv < 9.0) successChance = 0.80;
-        else if (shooterLv >= 9.0) successChance = 0.90;
+        // 📉 난이도 조정: 골 득점 성공 기본 확률 및 구간 확률 하향 밸런싱
+        let successChance = 0.35;
+        if (shooterLv >= 6.0 && shooterLv < 7.0) successChance = 0.45;
+        else if (shooterLv >= 7.0 && shooterLv < 8.0) successChance = 0.55;
+        else if (shooterLv >= 8.0 && shooterLv < 9.0) successChance = 0.65;
+        else if (shooterLv >= 9.0) successChance = 0.75;
 
         if (Math.random() < successChance) {
             this.isFlying = false; this.ignoreWalls = false; this.isChecking = false;
             if (scoringTeam === "BLUE") { scoreBlue += 2; } else { scoreRed += 2; }
-            document.getElementById("score1").innerText = scoreBlue;
-            document.getElementById("score2").innerText = scoreRed;
+            document.getElementById("score1").innerText = scoreBlue; document.getElementById("score2").innerText = scoreRed;
             if (isReferee) { socket.emit("syncScore", { blue: scoreBlue, red: scoreRed, scoringTeam: scoringTeam }); }
             this.resetBall();
         } else {
             const randomAngle = Math.random() * Math.PI * 2; const bouncePower = 11 + Math.random() * 4;
             this.vx = Math.cos(randomAngle) * bouncePower; this.vy = Math.sin(randomAngle) * bouncePower;
             this.x += this.vx * 1.5; this.ignoreWalls = false;
-            if (isReferee) {
-                socket.emit("syncBallAction", { x: this.x, y: this.y, vx: this.vx, vy: this.vy, holderId: null, isFlying: true, lastShooterSkill: shooterLv });
-            }
+            if (isReferee) { socket.emit("syncBallAction", { x: this.x, y: this.y, vx: this.vx, vy: this.vy, holderId: null, isFlying: true, lastShooterSkill: shooterLv }); }
         }
     },
     resetBall() {
@@ -527,24 +490,20 @@ let activePlayers = [];
 function buildActivePlayersPool(preserveNames = true) {
     const backupMap = {};
     activePlayers.forEach(p => { if (p.ownerName) { backupMap[`${p.team}_${p.id}`] = { ownerName: p.ownerName, socketId: p.socketId, skillLevel: p.skillLevel, x: p.x, y: p.y, angle: p.angle }; } });
-    if (!preserveNames) { registeredNames.clear(); }
-    activePlayers = [];
+    if (!preserveNames) { registeredNames.clear(); } activePlayers = [];
     for(let i = 0; i < maxBluePlayers; i++) {
-        let bPos = allSpawnPositions.BLUE[i]; 
-        let p = new Player(bPos.x, bPos.y, "BLUE", i+1, i);
+        let bPos = allSpawnPositions.BLUE[i]; let p = new Player(bPos.x, bPos.y, "BLUE", i+1, i);
         let bk = backupMap[`BLUE_${i+1}`];
         if (bk && preserveNames) { p.ownerName = bk.ownerName; p.socketId = bk.socketId; p.skillLevel = bk.skillLevel; p.x = bk.x; p.y = bk.y; p.angle = bk.angle; registeredNames.add(bk.ownerName); }
         activePlayers.push(p);
     }
     for(let i = 0; i < maxRedPlayers; i++) {
-        let rPos = allSpawnPositions.RED[i]; 
-        let p = new Player(rPos.x, rPos.y, "RED", i+1, i);
+        let rPos = allSpawnPositions.RED[i]; let p = new Player(rPos.x, rPos.y, "RED", i+1, i);
         let bk = backupMap[`RED_${i+1}`];
         if (bk && preserveNames) { p.ownerName = bk.ownerName; p.socketId = bk.socketId; p.skillLevel = bk.skillLevel; p.x = bk.x; p.y = bk.y; p.angle = bk.angle; registeredNames.add(bk.ownerName); }
         activePlayers.push(p);
     }
-    const findMySlot = activePlayers.find(p => p.ownerName === myProfileName);
-    if (findMySlot) { myControllingPlayer = findMySlot; }
+    const findMySlot = activePlayers.find(p => p.ownerName === myProfileName); if (findMySlot) { myControllingPlayer = findMySlot; }
     updateAdminDropdown();
 }
 
@@ -553,8 +512,7 @@ function sendMatchCapacity() {
     let bMax = parseInt(maxBlueInput.value) || 5; let rMax = parseInt(maxRedInput.value) || 5;
     if (bMax < 1) bMax = 1; if (bMax > 5) bMax = 5; if (rMax < 1) rMax = 1; if (rMax > 5) rMax = 5;
     maxBlueInput.value = bMax; maxRedInput.value = rMax; maxBluePlayers = bMax; maxRedPlayers = rMax;
-    buildActivePlayersPool(true);
-    socket.emit("syncMatchCapacity", { blueMax: bMax, redMax: rMax });
+    buildActivePlayersPool(true); socket.emit("syncMatchCapacity", { blueMax: bMax, redMax: rMax });
 }
 
 function updateAdminDropdown() {
@@ -586,8 +544,7 @@ function updatePlayerSkill() {
 }
 
 function authReferee() {
-    const inputName = document.getElementById("refName").value.trim();
-    const inputKey = document.getElementById("refKey").value;
+    const inputName = document.getElementById("refName").value.trim(); const inputKey = document.getElementById("refKey").value;
     if (!inputName) { alert("감독 이름을 입력해 주세요!"); return; }
     if (inputKey === "483010") { socket.emit("syncRegisterDirector", { name: inputName, token: "DIR_TOKEN_" + myProfileName }); } 
     else { alert("잘못된 심판 코드입니다!"); }
@@ -609,8 +566,7 @@ function sendLiveTeamName(team) {
 }
 
 function startGame() {
-    if (!isReferee) return;
-    document.getElementById("startBtn").blur(); canvas.focus();
+    if (!isReferee) return; document.getElementById("startBtn").blur(); canvas.focus();
     if (gameState === "SETUP") {
         teamBlueName = document.getElementById("teamNameBlueInput").value.trim() || "TEAM BLUE";
         teamRedName = document.getElementById("teamNameRedInput").value.trim() || "TEAM RED";
@@ -620,19 +576,13 @@ function startGame() {
 
 function triggerManualReset() {
     if (!isReferee) return; resetBtn.blur();
-    if(confirm("정말로 전체 경기를 처음 상태로 완전히 초기화하시겠습니까? 유저 기록과 로컬 자동 로그인 세션이 삭제됩니다.")) { 
-        sessionStorage.clear(); // 완전 리셋 시 브라우저 토큰도 휘발 처리
-        socket.emit("syncResetMatch"); 
-    }
+    if(confirm("정말로 전체 경기를 처음 상태로 완전히 초기화하시겠습니까?")) { sessionStorage.clear(); socket.emit("syncResetMatch"); }
 }
 
-function togglePause() {
-    if (!isReferee) return; if (gameState === "SETUP") return;
-    pauseBtn.blur(); socket.emit("syncTogglePause");
-}
+function togglePause() { if (!isReferee) return; if (gameState === "SETUP") return; pauseBtn.blur(); socket.emit("syncTogglePause"); }
 
 function shootAction(player) {
-    if (gameState === "PAUSE") return;
+    if (gameState !== "PLAYING") return;
     ball.holder = null; ball.isFlying = true; ball.ignoreWalls = false; ball.isChecking = false;
     const power = 14; ball.vx = Math.cos(player.angle) * power; ball.vy = Math.sin(player.angle) * power;
     ball.lastShooterSkill = player.skillLevel || 5.0;
@@ -640,7 +590,7 @@ function shootAction(player) {
 }
 
 function passAction(player) {
-    if (gameState === "PAUSE") return;
+    if (gameState !== "PLAYING") return;
     ball.holder = null; ball.isFlying = true; ball.ignoreWalls = false; ball.isChecking = false;
     const power = 11; ball.vx = Math.cos(player.angle) * power; ball.vy = Math.sin(player.angle) * power;
     socket.emit("syncBallAction", { x: ball.x, y: ball.y, vx: ball.vx, vy: ball.vy, holderId: null, isFlying: true });
@@ -648,8 +598,7 @@ function passAction(player) {
 
 function sendDirectorChat() {
     const input = document.getElementById("directorChatMsg"); const text = input.value;
-    if(!text.trim()) return;
-    socket.emit('sendDirectorChat', text); input.value = ""; canvas.focus();
+    if(!text.trim()) return; socket.emit('sendDirectorChat', text); input.value = ""; canvas.focus();
 }
 
 function appendLogToUI(log) {
@@ -662,24 +611,29 @@ function appendLogToUI(log) {
 
 document.getElementById("gameContainer").addEventListener("contextmenu", e => { e.preventDefault(); });
 
+// 🔄 수정을 통한 버그 극복: 미니게임 게이지 클릭 연타 시 상태 유실 없이 동기화 연동
 function processMiniGameTap() {
     if (gameState !== "MINIGAME" || !myControllingPlayer) return;
     const p = myControllingPlayer;
+    
+    // 수비수가 누르면 파란색 방향(0%)으로, 공격수가 누르면 빨간색 방향(100%)으로 밀어냄
     if (activeDefender && p.team === activeDefender.team && p.id === activeDefender.id) {
-        miniGameGauge -= 2.5; if (miniGameGauge < 0) miniGameGauge = 0;
+        miniGameGauge -= 3.0; if (miniGameGauge < 0) miniGameGauge = 0;
         socket.emit("syncMiniGameHit", miniGameGauge);
     } 
     else if (activeAttacker && p.team === activeAttacker.team && p.id === activeAttacker.id) {
-        miniGameGauge += 2.5; if (miniGameGauge > 100) miniGameGauge = 100;
+        miniGameGauge += 3.0; if (miniGameGauge > 100) miniGameGauge = 100;
         socket.emit("syncMiniGameHit", miniGameGauge);
     }
 }
 
-miniGameUI.addEventListener("pointerdown", e => { e.preventDefault(); processMiniGameTap(); });
+// UI 연타 방식 다각화 (클릭 렉 최소화용 전용 버튼 지원 포함)
+miniGameUI.addEventListener("pointerdown", e => { if(e.target !== miniTapButton) { e.preventDefault(); processMiniGameTap(); } });
+miniTapButton.addEventListener("click", e => { e.preventDefault(); e.stopPropagation(); processMiniGameTap(); });
 
 canvas.addEventListener("mousedown", e => {
     canvas.focus();
-    if (gameState === "MINIGAME" && e.button === 2) { e.preventDefault(); processMiniGameTap(); return; }
+    if (gameState === "MINIGAME") { if (e.button === 2 || e.button === 0) { e.preventDefault(); processMiniGameTap(); } return; }
     if (e.button === 0) {
         const rect = canvas.getBoundingClientRect();
         const mouseX = ((e.clientX - rect.left) / rect.width) * canvas.width;
@@ -692,16 +646,12 @@ canvas.addEventListener("mousedown", e => {
                 const dist = Math.hypot(p.x - mouseX, p.y - mouseY);
                 if (dist < p.radius + 15) {
                     if (!p.ownerName) {
-                        if (registeredNames.has(myProfileName)) { alert("이미 한 명의 선수를 전담 마크 등록하셨습니다."); return; }
+                        if (registeredNames.has(myProfileName)) { alert("이미 한 명의 선수를 등록하셨습니다."); return; }
                         p.ownerName = myProfileName; p.socketId = socket.id;
                         myControllingPlayer = p; registeredNames.add(myProfileName);
-                        
-                        socket.emit("syncRegisterOwner", { 
-                            team: p.team, id: p.id, ownerName: myProfileName, 
-                            password: myProfilePassword, x: p.x, y: p.y, angle: p.angle 
-                        });
+                        socket.emit("syncRegisterOwner", { team: p.team, id: p.id, ownerName: myProfileName, password: myProfilePassword, x: p.x, y: p.y, angle: p.angle });
                         updateAdminDropdown();
-                    } else { alert(`이미 선택 완료된 캐릭터입니다.`); }
+                    }
                 }
             });
         }
@@ -709,6 +659,7 @@ canvas.addEventListener("mousedown", e => {
 });
 
 canvas.addEventListener("touchstart", e => {
+    if (gameState === "MINIGAME") { e.preventDefault(); processMiniGameTap(); return; }
     if (gameState !== "SETUP" || myControllingPlayer || e.touches.length === 0) return;
     const rect = canvas.getBoundingClientRect(); const touch = e.touches[0];
     const mouseX = ((touch.clientX - rect.left) / rect.width) * canvas.width;
@@ -717,14 +668,10 @@ canvas.addEventListener("touchstart", e => {
         const dist = Math.hypot(p.x - mouseX, p.y - mouseY);
         if (dist < p.radius + 20) {
             if (!p.ownerName) {
-                if (registeredNames.has(myProfileName)) { alert("이미 한 명의 선수를 전담 마크 등록하셨습니다."); return; }
+                if (registeredNames.has(myProfileName)) { alert("이미 한 명의 선수를 등록하셨습니다."); return; }
                 p.ownerName = myProfileName; p.socketId = socket.id;
                 myControllingPlayer = p; registeredNames.add(myProfileName);
-                
-                socket.emit("syncRegisterOwner", { 
-                    team: p.team, id: p.id, ownerName: myProfileName, 
-                    password: myProfilePassword, x: p.x, y: p.y, angle: p.angle 
-                });
+                socket.emit("syncRegisterOwner", { team: p.team, id: p.id, ownerName: myProfileName, password: myProfilePassword, x: p.x, y: p.y, angle: p.angle });
                 updateAdminDropdown();
             }
         }
@@ -735,7 +682,11 @@ window.addEventListener("keydown", e => {
     if (document.activeElement === document.getElementById("directorChatMsg") || !targetRoomId) return;
     const key = e.key.toLowerCase(); keys[key] = true;
     if (e.key === " " || e.key === "Enter" || e.key.toLowerCase() === "shift") { e.preventDefault(); }
+    
+    // 디펜스 미니게임 중에는 연타 전용 조작을 제외한 다른 조작키(패스, 슛, 이동 등) 완전 차단
+    if (gameState === "MINIGAME") { if(key === 'e' || e.key === " ") { processMiniGameTap(); } return; }
     if (gameState === "PAUSE") return;
+
     if (gameState === "PLAYING" && myControllingPlayer) {
         const p = myControllingPlayer;
         if (key === onlineScheme.grab) { checkManualBallGrab(p); }
@@ -760,7 +711,9 @@ function checkDefenseTrigger(player) {
     if (gameState !== "PLAYING" || !ball.holder || ball.holder.team === player.team) return;
     if (Date.now() < globalDefenseLockUntil) return;
     const target = ball.holder; const dist = Math.hypot(player.x - target.x, player.y - target.y);
-    if (dist < player.radius + target.radius + 28) {
+    
+    // 📉 난이도 조정: 무분별한 스틸 난사를 막기 위해 디펜스 발동 가능 사거리를 절반 이하로 축소 (28 -> 13)
+    if (dist < player.radius + target.radius + 13) {
         activeDefender = player; activeAttacker = target; miniGameGauge = 50; miniGameTimer = 5.0; gameState = "MINIGAME";
         socket.emit("syncStartMiniGame", { defTeam: player.team, defId: player.id, attTeam: target.team, attId: target.id });
     }
@@ -771,12 +724,13 @@ const vJoystickStick = document.getElementById("vJoystickStick");
 let joystickActive = false; let joystickStartX = 0; let joystickStartY = 0; const joystickMaxRadius = 40;
 
 vJoystickContainer.addEventListener("touchstart", e => {
-    if (e.touches.length === 0) return; joystickActive = true; const touch = e.touches[0]; const rect = vJoystickContainer.getBoundingClientRect();
+    if (e.touches.length === 0 || gameState === "MINIGAME") return; 
+    joystickActive = true; const touch = e.touches[0]; const rect = vJoystickContainer.getBoundingClientRect();
     joystickStartX = rect.left + rect.width / 2; joystickStartY = rect.top + rect.height / 2;
 });
 
 window.addEventListener("touchmove", e => {
-    if (!joystickActive) return;
+    if (!joystickActive || gameState === "MINIGAME") return;
     const touch = Array.from(e.touches).find(t => t.target.closest("#vJoystickContainer") || joystickActive); if (!touch) return;
     let deltaX = touch.clientX - joystickStartX; let deltaY = touch.clientY - joystickStartY; const distance = Math.hypot(deltaX, deltaY);
     if (distance > joystickMaxRadius) { deltaX = (deltaX / distance) * joystickMaxRadius; deltaY = (deltaY / distance) * joystickMaxRadius; }
@@ -816,6 +770,7 @@ function gameLoop(currentTime) {
         ball.update(dt);
     }
     else if (gameState === "MINIGAME") {
+        // 🔒 방 모든 유저 대상 프리징: 미니게임 중에는 그 어떤 유저 프레임 움직임 연산도 갱신하지 않고 스톱시킴
         if (isReferee) {
             miniGameTimer -= dt;
             if (miniGameTimer <= 0) {
@@ -836,33 +791,55 @@ function gameLoop(currentTime) {
 }
 
 function drawCourt() {
-    ctx.fillStyle = "#27ae60"; ctx.fillRect(0, 0, canvas.width, canvas.height); ctx.lineWidth = 3; ctx.strokeStyle = "rgba(255,255,255,0.6)";
+    // 🎨 업데이트: 코트 내부 컬러를 오렌지 계열 브릭 농구장 톤(`#e67e22`)으로 묘사하여 가시성 강화
+    ctx.fillStyle = "#e67e22"; ctx.fillRect(0, 0, canvas.width, canvas.height); ctx.lineWidth = 3; ctx.strokeStyle = "rgba(255,255,255,0.75)";
     ctx.beginPath(); ctx.moveTo(500, 0); ctx.lineTo(500, 500); ctx.stroke(); ctx.beginPath(); ctx.arc(500, 250, 75, 0, Math.PI * 2); ctx.stroke();
-    ctx.strokeRect(0, 0, canvas.width, canvas.height); ctx.fillStyle = "rgba(52, 152, 219, 0.2)"; ctx.fillRect(0, 100, 120, 300); ctx.strokeRect(0, 100, 120, 300);
-    ctx.fillStyle = "rgba(231, 76, 60, 0.2)"; ctx.fillRect(880, 100, 120, 300); ctx.strokeRect(880, 100, 120, 300);
-    ctx.lineWidth = 5; ctx.strokeStyle = "#3498db"; ctx.beginPath(); ctx.arc(court.leftGoal.x, court.leftGoal.y, court.leftGoal.radius, 0, Math.PI * 2); ctx.stroke();
-    ctx.strokeStyle = "#e74c3c"; ctx.beginPath(); ctx.arc(court.rightGoal.x, court.rightGoal.y, court.rightGoal.radius, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeRect(0, 0, canvas.width, canvas.height); ctx.fillStyle = "rgba(52, 152, 219, 0.15)"; ctx.fillRect(0, 100, 120, 300); ctx.strokeRect(0, 100, 120, 300);
+    ctx.fillStyle = "rgba(231, 76, 60, 0.15)"; ctx.fillRect(880, 100, 120, 300); ctx.strokeRect(880, 100, 120, 300);
+    
+    // 🎯 골대 가시성 리밸런싱: 오렌지 코트에서 확 띄도록 백보드는 진블랙, 바스켓 안쪽은 완전 고대비 핫옐로우 림(`#ffea00`) 처리
+    ctx.lineWidth = 5; 
+    ctx.strokeStyle = "#111111"; // 백보드 외곽선 느낌의 블랙 배합
+    ctx.beginPath(); ctx.arc(court.leftGoal.x, court.leftGoal.y, court.leftGoal.radius, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = "#ffea00"; ctx.fill(); // 중앙 과녁 가시 인지용 옐로우 도색
+    
+    ctx.beginPath(); ctx.arc(court.rightGoal.x, court.rightGoal.y, court.rightGoal.radius, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = "#ffea00"; ctx.fill();
 }
 
 function startMiniGameUI(data) {
-    gameState = "MINIGAME"; miniGameGauge = 50;
-    activeDefender = activePlayers.find(p => p.team === data.defTeam && p.id === data.defId); activeAttacker = activePlayers.find(p => p.team === data.attTeam && p.id === data.attId);
-    const defName = activeDefender?.ownerName || "수비수"; const attName = activeAttacker?.ownerName || "공격수";
+    gameState = "MINIGAME";
+    activeDefender = activePlayers.find(p => p.team === data.defTeam && p.id === data.defId);
+    activeAttacker = activePlayers.find(p => p.team === data.attTeam && p.id === data.attId);
+    
+    const defName = activeDefender?.ownerName || "수비수";
+    const attName = activeAttacker?.ownerName || "공격수";
     document.getElementById("miniGameVS").innerText = `🛡️ [수비] ${defName} VS 🎯 [공격] ${attName}`;
-    progressBar.style.width = "50%"; miniGameUI.style.display = "block";
-    cutIn.innerText = "디펜스 발동!!"; cutIn.classList.add("active"); setTimeout(() => { cutIn.classList.remove("active"); }, 900);
+    
+    // 👥 관전자 동기화 활성화: 해당 매치의 타겟 당사자들만 입력 버튼을 보여주고 관전자는 버튼 없이 게이지 관람만 유도
+    const amIDefender = (myControllingPlayer && myControllingPlayer.team === data.defTeam && myControllingPlayer.id === data.defId);
+    const amIAttacker = (myControllingPlayer && myControllingPlayer.team === data.attTeam && myControllingPlayer.id === data.attId);
+    
+    if (amIDefender || amIAttacker) {
+        miniGameClickZone.style.display = "block";
+        miniTapButton.innerText = amIDefender ? "수비 연타! (블루)" : "공격 연타! (레드)";
+    } else {
+        miniGameClickZone.style.display = "none";
+    }
+
+    progressBar.style.width = `${miniGameGauge}%`; miniGameUI.style.display = "block";
+    cutIn.innerText = "디펜스 매치!!"; cutIn.classList.add("active"); setTimeout(() => { cutIn.classList.remove("active"); }, 900);
 }
 
 function endMiniGame(resultData) {
-    gameState = "PLAYING"; miniGameUI.style.display = "none";
+    gameState = "PLAYING"; miniGameUI.style.display = "none"; miniGameClickZone.style.display = "none";
     if (resultData.holderId) { ball.holder = activePlayers.find(p => p.team === resultData.holderTeam && p.id === resultData.holderId); } else { ball.holder = null; }
     if (resultData.globalDefenseLockUntil) { globalDefenseLockUntil = resultData.globalDefenseLockUntil; }
     cutIn.innerText = resultData.isDefWin ? "스틸 성공!!" : "돌파 성공!!"; cutIn.classList.add("active"); setTimeout(() => { cutIn.classList.remove("active"); }, 900);
 }
 
 socket.on("onInitRoomState", (state) => {
-    console.log("[클라이언트] 초기 정보 로드 성공 및 연동", state);
-    
+    console.log("[클라이언트] 초기 정보 로드 성공", state);
     scoreBlue = state.scoreBlue; scoreRed = state.scoreRed;
     document.getElementById("score1").innerText = scoreBlue; document.getElementById("score2").innerText = scoreRed;
     maxBluePlayers = state.maxBluePlayers; maxRedPlayers = state.maxRedPlayers;
@@ -880,17 +857,13 @@ socket.on("onInitRoomState", (state) => {
             const p = activePlayers.find(o => o.team === data.team && o.id === data.id);
             if (p) {
                 p.ownerName = data.ownerName; p.socketId = data.socketId; p.skillLevel = data.skillLevel;
-                if (data.x !== undefined) p.x = data.x;
-                if (data.y !== undefined) p.y = data.y;
-                if (data.angle !== undefined) p.angle = data.angle;
+                if (data.x !== undefined) p.x = data.x; if (data.y !== undefined) p.y = data.y; if (data.angle !== undefined) p.angle = data.angle;
                 registeredNames.add(data.ownerName);
             }
         });
     }
 
-    // 나의 슬롯 연동 재확인
-    const findMySlot = activePlayers.find(p => p.ownerName === myProfileName);
-    if (findMySlot) { myControllingPlayer = findMySlot; }
+    const findMySlot = activePlayers.find(p => p.ownerName === myProfileName); if (findMySlot) { myControllingPlayer = findMySlot; }
 
     updateAdminDropdown();
     logContainer.innerHTML = ""; if (state.logs) state.logs.forEach(log => appendLogToUI(log));
@@ -908,11 +881,14 @@ socket.on("onInitRoomState", (state) => {
         document.getElementById("adminSkillZone").style.display = "none"; chatInputZone.style.display = "none";
     }
     
-    gameState = state.gameState; toggleUIVisibility();
-    
-    if(!loopStarted) {
-        lastTime = performance.now(); gameLoop(lastTime); loopStarted = true;
+    gameState = state.gameState; 
+    if (gameState === "MINIGAME" && state.activeDefender && state.activeAttacker) {
+        miniGameGauge = state.miniGameGauge;
+        startMiniGameUI({ defTeam: state.activeDefender.team, defId: state.activeDefender.id, attTeam: state.activeAttacker.team, attId: state.activeAttacker.id });
     }
+    
+    toggleUIVisibility();
+    if(!loopStarted) { lastTime = performance.now(); gameLoop(lastTime); loopStarted = true; }
 });
 
 socket.on("onPlayerMove", (data) => { const p = activePlayers.find(o => o.team === data.team && o.id === data.id); if (p) { p.x = data.x; p.y = data.y; p.angle = data.angle; } });
@@ -926,10 +902,7 @@ socket.on("onRegisterOwner", (data) => {
     if (p) {
         if (p.ownerName) registeredNames.delete(p.ownerName);
         if (data.ownerName === "") { p.ownerName = null; p.socketId = null; p.skillLevel = 5.0; } 
-        else {
-            p.ownerName = data.ownerName; p.socketId = data.socketId || null; registeredNames.add(data.ownerName);
-            if (data.ownerName === myProfileName) { myControllingPlayer = p; }
-        }
+        else { p.ownerName = data.ownerName; p.socketId = data.socketId || null; registeredNames.add(data.ownerName); if (data.ownerName === myProfileName) { myControllingPlayer = p; } }
     }
     updateAdminDropdown();
 });
@@ -958,13 +931,15 @@ socket.on("onGameStateChange", (data) => { gameState = data.state; toggleUIVisib
 socket.on("onResetMatch", () => {
     gameState = "SETUP"; scoreBlue = 0; scoreRed = 0; document.getElementById("score1").innerText = 0; document.getElementById("score2").innerText = 0;
     myControllingPlayer = null; isReferee = false; myDirectorName = ""; globalDefenseLockUntil = 0; registeredNames.clear();
-    buildActivePlayersPool(false); ball.resetBall();
+    buildActivePlayersPool(false); ball.resetBall(); miniGameUI.style.display = "none";
     document.getElementById("refName").value = ""; document.getElementById("refKey").value = "";
     document.getElementById("refereeZone").style.display = "flex"; document.getElementById("adminSkillZone").style.display = "none"; chatInputZone.style.display = "none";
     document.getElementById("teamNameBlueInput").disabled = true; document.getElementById("teamNameRedInput").disabled = true;
     toggleUIVisibility();
 });
 socket.on("onScoreUpdate", (data) => { scoreBlue = data.blue; scoreRed = data.red; document.getElementById("score1").innerText = scoreBlue; document.getElementById("score2").innerText = scoreRed; });
+
+// 👥 실시간 미니게임 중계 시스템 구현 사항
 socket.on("onStartMiniGame", (data) => { startMiniGameUI(data); });
 socket.on("onMiniGameGauge", (gauge) => { miniGameGauge = gauge; progressBar.style.width = `${miniGameGauge}%`; });
 socket.on("onEndMiniGame", (resultData) => { endMiniGame(resultData); });
@@ -975,9 +950,10 @@ function toggleUIVisibility() {
     if (gameState === "PLAYING" || gameState === "MINIGAME" || gameState === "PAUSE") {
         document.getElementById("startBtn").disabled = true; pauseBtn.disabled = !isReferee; resetBtn.disabled = !isReferee;
         if (gameState === "PAUSE") { statusText.innerText = "[일시정지] 경기가 멈췄습니다."; statusText.style.color = "#e74c3c"; pauseBtn.innerText = "RESUME"; } 
+        else if (gameState === "MINIGAME") { statusText.innerText = "[디펜스 매치] 실시간 경합이 벌어지고 있습니다!"; statusText.style.color = "#f1c40f"; }
         else { statusText.innerText = "[경기 중] 매치 진행 중!"; statusText.style.color = "#2ecc71"; pauseBtn.innerText = "PAUSE"; }
     } else {
-        statusText.innerText = isReferee ? "[대기 모드] 팀별 매치 인원을 설정하고 경기를 시작하세요." : "[관전자 모드] 감독 코드를 입력하세요.";
+        statusText.innerText = isReferee ? "[대기 모드] 매치 인원을 설정하고 경기를 시작하세요." : "[관전자 모드] 감독 코드를 입력하세요.";
         statusText.style.color = "#f1c40f"; document.getElementById("startBtn").disabled = !isReferee; pauseBtn.disabled = true; resetBtn.disabled = !isReferee; pauseBtn.innerText = "PAUSE";
     }
 }

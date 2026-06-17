@@ -97,13 +97,14 @@
             position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
             background: rgba(0,0,0,0.9); padding: 15px 25px; border-radius: 12px;
             border: 3px solid #f1c40f; text-align: center; display: none; z-index: 25;
-            touch-action: none; width: 80%; max-width: 320px; box-sizing: border-box;
+            touch-action: none; width: 80%; max-width: 340px; box-sizing: border-box;
         }
-        .progress-bar { width: 100%; height: 20px; background-color: #555; border-radius: 10px; overflow: hidden; margin-top: 10px; border: 1px solid #fff; }
-        #progress { width: 50%; height: 100%; background: linear-gradient(90deg, #3498db, #e74c3c); transition: width 0.05s linear; }
+        .progress-bar { width: 100%; height: 24px; background-color: #e74c3c; border-radius: 6px; overflow: hidden; margin-top: 10px; border: 2px solid #fff; position: relative; }
+        #progress { width: 50%; height: 100%; background-color: #3498db; transition: width 0.04s ease-out; }
+        #gaugeTextInfo { position: absolute; width: 100%; top: 0; left: 0; height: 100%; display: flex; justify-content: space-between; align-items: center; padding: 0 8px; box-sizing: border-box; font-size: 11px; font-weight: bold; color: #fff; text-shadow: 1px 1px 2px #000; pointer-events: none; }
         #miniGameClickZone { display: none; margin-top: 12px; }
-        .mini-tap-btn { width: 100%; padding: 10px; background: #e74c3c; color: #fff; font-size: 16px; font-weight: bold; border-radius: 6px; cursor: pointer; border: none; }
-        .mini-tap-btn:active { background: #c0392b; }
+        .mini-tap-btn { width: 100%; padding: 10px; background: #f39c12; color: #fff; font-size: 16px; font-weight: bold; border-radius: 6px; cursor: pointer; border: none; }
+        .mini-tap-btn:active { background: #d35400; }
 
         #ui { margin-top: 10px; font-size: 24px; font-weight: bold; display: none; gap: 60px; justify-content: center; width: 100%; }
         #adminSkillZone { display: none; align-items: center; gap: 5px; background: #444; padding: 3px 8px; border-radius: 4px; border: 1px solid #666; }
@@ -225,8 +226,14 @@
         <div id="gameContainer">
             <div id="cutIn">디펜스!!</div>
             <div id="miniGameUI">
-                <div id="miniGameTitle" style="font-weight:bold; font-size:14px;">🔥 아래 버튼을 마구 연타하세요!! 🔥</div>
-                <div class="progress-bar"><div id="progress"></div></div>
+                <div id="miniGameTitle" style="font-weight:bold; font-size:14px;">🔥 5초 동안 본인 게이지를 넓히세요! 🔥</div>
+                <div class="progress-bar">
+                    <div id="progress"></div>
+                    <div id="gaugeTextInfo">
+                        <span id="defGaugeValue">수비: 25</span>
+                        <span id="attGaugeValue">공격: 25</span>
+                    </div>
+                </div>
                 <div id="miniGameVS" style="font-size:11px; margin-top:5px; color:#ccc;">수비수 VS 공격수</div>
                 <div id="miniGameClickZone"><button class="mini-tap-btn" id="miniTapButton">PUSH!!</button></div>
             </div>
@@ -297,7 +304,7 @@ let teamBlueName = "TEAM BLUE"; let teamRedName = "TEAM RED";
 let maxBluePlayers = 5; let maxRedPlayers = 5;
 
 let gameState = "SETUP"; 
-let miniGameGauge = 50; let miniGameTimer = 0;
+let miniGameGauge = 25; let miniGameTimer = 0;
 let activeDefender = null; let activeAttacker = null;
 let globalDefenseLockUntil = 0; 
 
@@ -366,7 +373,6 @@ class Player {
     constructor(x, y, team, id, spawnIndex) {
         this.x = x; this.y = y; this.team = team; this.id = id; this.spawnIndex = spawnIndex;
         this.radius = 11; 
-        // 📉 밸런스 조정: 캐릭터 기본 이동 속도 추가 하향 (기존 210 -> 150)
         this.baseSpeed = 150; 
         this.color = team === "BLUE" ? "#3498db" : "#e74c3c";
         this.ownerName = null; this.socketId = null;
@@ -579,8 +585,8 @@ function togglePause() { if (!isReferee) return; if (gameState === "SETUP") retu
 function shootAction(player) {
     if (gameState !== "PLAYING") return;
     ball.holder = null; ball.isFlying = true; ball.ignoreWalls = false; ball.isChecking = false;
-    // 📉 밸런스 조정: 슛 사거리 축소를 위해 날아가는 속도 파워 하향 (기존 14 -> 9)
-    const power = 9; 
+    // 🏀 중앙 던지기 절반 패치 완료 (사거리 파워 4.8 지정)
+    const power = 4.8; 
     ball.vx = Math.cos(player.angle) * power; ball.vy = Math.sin(player.angle) * power;
     ball.lastShooterSkill = player.skillLevel || 5.0;
     socket.emit("syncBallAction", { x: ball.x, y: ball.y, vx: ball.vx, vy: ball.vy, holderId: null, isFlying: true, lastShooterSkill: player.skillLevel || 5.0 });
@@ -612,13 +618,12 @@ function processMiniGameTap() {
     if (gameState !== "MINIGAME" || !myControllingPlayer) return;
     const p = myControllingPlayer;
     
+    // ⚔️ [수비수 vs 공격수] 연타에 따른 독립적 본인 구역 게이지 확보 연산 요청
     if (activeDefender && p.team === activeDefender.team && p.id === activeDefender.id) {
-        miniGameGauge -= 3.0; if (miniGameGauge < 0) miniGameGauge = 0;
-        socket.emit("syncMiniGameHit", miniGameGauge);
+        socket.emit("syncMiniGameHit", "DEFENDER");
     } 
     else if (activeAttacker && p.team === activeAttacker.team && p.id === activeAttacker.id) {
-        miniGameGauge += 3.0; if (miniGameGauge > 100) miniGameGauge = 100;
-        socket.emit("syncMiniGameHit", miniGameGauge);
+        socket.emit("syncMiniGameHit", "ATTACKER");
     }
 }
 
@@ -627,14 +632,7 @@ miniTapButton.addEventListener("click", e => { e.preventDefault(); e.stopPropaga
 
 canvas.addEventListener("mousedown", e => {
     canvas.focus();
-    // 🚨 중요 버그 수정: 미니게임 중일 때 캔버스를 임의 클릭하더라도 자동 수비 성공 연산이 트리거되지 않도록 차단
-    if (gameState === "MINIGAME") { 
-        if (e.button === 2 || e.button === 0) { 
-            e.preventDefault(); 
-            processMiniGameTap(); 
-        } 
-        return; 
-    }
+    if (gameState === "MINIGAME") { e.preventDefault(); return; }
     
     if (e.button === 0) {
         const rect = canvas.getBoundingClientRect();
@@ -663,7 +661,7 @@ canvas.addEventListener("mousedown", e => {
 });
 
 canvas.addEventListener("touchstart", e => {
-    if (gameState === "MINIGAME") { e.preventDefault(); processMiniGameTap(); return; }
+    if (gameState === "MINIGAME") { e.preventDefault(); return; }
     if (gameState !== "SETUP" || myControllingPlayer || e.touches.length === 0) return;
     const rect = canvas.getBoundingClientRect(); const touch = e.touches[0];
     const mouseX = ((touch.clientX - rect.left) / rect.width) * canvas.width;
@@ -716,7 +714,7 @@ function checkDefenseTrigger(player) {
     const target = ball.holder; const dist = Math.hypot(player.x - target.x, player.y - target.y);
     
     if (dist < player.radius + target.radius + 13) {
-        activeDefender = player; activeAttacker = target; miniGameGauge = 50; miniGameTimer = 5.0; gameState = "MINIGAME";
+        activeDefender = player; activeAttacker = target; miniGameGauge = 25; miniGameTimer = 5.0; gameState = "MINIGAME";
         socket.emit("syncStartMiniGame", { defTeam: player.team, defId: player.id, attTeam: target.team, attId: target.id });
     }
 }
@@ -775,14 +773,20 @@ function gameLoop(currentTime) {
         if (isReferee) {
             miniGameTimer -= dt;
             if (miniGameTimer <= 0) {
-                let isDefWin = miniGameGauge < 50; if (Math.abs(miniGameGauge - 50) < 0.01) isDefWin = Math.random() < 0.5;
+                // ⚖️ 5초 타임아웃 종료 시점 양측 점수 대결 비교 연산
+                const defGauge = miniGameGauge;
+                const attGauge = 50 - miniGameGauge;
+                let isDefWin = defGauge > attGauge;
+                
+                if (defGauge === attGauge) { isDefWin = Math.random() < 0.5; } // 완전 동점 시 무작위 판정
+
                 gameState = "PLAYING";
                 if (isDefWin) {
                     ball.holder = activeDefender;
-                    socket.emit("syncEndMiniGame", { isDefWin: true, defTeam: activeDefender.team, defId: activeDefender.id, holderTeam: activeDefender.team, holderId: activeDefender.id });
+                    socket.emit("syncEndMiniGame", { isDefWin: true, defTeam: activeDefender.team, defId: activeDefender.id, holderTeam: activeDefender.team, holderId: activeDefender.id, defGauge: defGauge, attGauge: attGauge });
                 } else {
                     ball.holder = activeAttacker;
-                    socket.emit("syncEndMiniGame", { isDefWin: false, attTeam: activeAttacker.team, attId: activeAttacker.id, holderTeam: activeAttacker.team, holderId: activeAttacker.id });
+                    socket.emit("syncEndMiniGame", { isDefWin: false, attTeam: activeAttacker.team, attId: activeAttacker.id, holderTeam: activeAttacker.team, holderId: activeAttacker.id, defGauge: defGauge, attGauge: attGauge });
                 }
             }
         }
@@ -797,18 +801,14 @@ function drawCourt() {
     ctx.strokeRect(0, 0, canvas.width, canvas.height); ctx.fillStyle = "rgba(52, 152, 219, 0.15)"; ctx.fillRect(0, 100, 120, 300); ctx.strokeRect(0, 100, 120, 300);
     ctx.fillStyle = "rgba(231, 76, 60, 0.15)"; ctx.fillRect(880, 100, 120, 300); ctx.strokeRect(880, 100, 120, 300);
     
-    ctx.lineWidth = 5; 
-    ctx.strokeStyle = "#111111"; 
-    ctx.beginPath(); ctx.arc(court.leftGoal.x, court.leftGoal.y, court.leftGoal.radius, 0, Math.PI * 2); ctx.stroke();
-    ctx.fillStyle = "#ffea00"; ctx.fill(); 
-    
-    ctx.beginPath(); ctx.arc(court.rightGoal.x, court.rightGoal.y, court.rightGoal.radius, 0, Math.PI * 2); ctx.stroke();
-    ctx.fillStyle = "#ffea00"; ctx.fill();
+    ctx.lineWidth = 5; ctx.strokeStyle = "#111111"; 
+    ctx.beginPath(); ctx.arc(court.leftGoal.x, court.leftGoal.y, court.leftGoal.radius, 0, Math.PI * 2); ctx.stroke(); ctx.fillStyle = "#ffea00"; ctx.fill(); 
+    ctx.beginPath(); ctx.arc(court.rightGoal.x, court.rightGoal.y, court.rightGoal.radius, 0, Math.PI * 2); ctx.stroke(); ctx.fillStyle = "#ffea00"; ctx.fill();
 }
 
 function startMiniGameUI(data) {
     gameState = "MINIGAME";
-    activeDefender = activePlayers.find(p => p.team === data.defTeam && p.id === data.defId);
+    activeDefender = activePlayers.find(p => p.team === data.defTeam && p.id === data.id);
     activeAttacker = activePlayers.find(p => p.team === data.attTeam && p.id === data.attId);
     
     const defName = activeDefender?.ownerName || "수비수";
@@ -820,20 +820,29 @@ function startMiniGameUI(data) {
     
     if (amIDefender || amIAttacker) {
         miniGameClickZone.style.display = "block";
-        miniTapButton.innerText = amIDefender ? "수비 연타! (블루)" : "공격 연타! (레드)";
+        miniTapButton.innerText = amIDefender ? "수비 땅따먹기 연타!! (+)" : "공격 땅따먹기 연타!! (-)";
     } else {
         miniGameClickZone.style.display = "none";
     }
 
-    progressBar.style.width = `${miniGameGauge}%`; miniGameUI.style.display = "block";
-    cutIn.innerText = "🔥 우클릭을 마구 연타하세요!! 🔥"; cutIn.classList.add("active"); setTimeout(() => { cutIn.classList.remove("active"); }, 900);
+    updateGaugeDisplay(miniGameGauge);
+    miniGameUI.style.display = "block";
+    cutIn.innerText = "🔥 5초 대결 개시!! 🔥"; cutIn.classList.add("active"); setTimeout(() => { cutIn.classList.remove("active"); }, 900);
+}
+
+function updateGaugeDisplay(gaugeValue) {
+    // 수비수 점수 비율 (0 ~ 50칸 중 차지한 양을 %로 가시화)
+    const pct = (gaugeValue / 50) * 100;
+    progressBar.style.width = `${pct}%`;
+    document.getElementById("defGaugeValue").innerText = `수비: ${gaugeValue}`;
+    document.getElementById("attGaugeValue").innerText = `공격: ${50 - gaugeValue}`;
 }
 
 function endMiniGame(resultData) {
     gameState = "PLAYING"; miniGameUI.style.display = "none"; miniGameClickZone.style.display = "none";
     if (resultData.holderId) { ball.holder = activePlayers.find(p => p.team === resultData.holderTeam && p.id === resultData.holderId); } else { ball.holder = null; }
     if (resultData.globalDefenseLockUntil) { globalDefenseLockUntil = resultData.globalDefenseLockUntil; }
-    cutIn.innerText = resultData.isDefWin ? "스틸 성공!!" : "돌파 성공!!"; cutIn.classList.add("active"); setTimeout(() => { cutIn.classList.remove("active"); }, 900);
+    cutIn.innerText = resultData.isDefWin ? "수비 지분 승리! 스틸!" : "공격 지분 승리! 방어!"; cutIn.classList.add("active"); setTimeout(() => { cutIn.classList.remove("active"); }, 1100);
 }
 
 socket.on("onInitRoomState", (state) => {
@@ -846,7 +855,6 @@ socket.on("onInitRoomState", (state) => {
     document.getElementById("teamLabel1").innerText = teamBlueName; document.getElementById("teamLabel2").innerText = teamRedName;
 
     if (state.globalDefenseLockUntil) { globalDefenseLockUntil = state.globalDefenseLockUntil; }
-    
     buildActivePlayersPool(true);
 
     if (state.registeredOwners && Array.isArray(state.registeredOwners)) {
@@ -861,7 +869,6 @@ socket.on("onInitRoomState", (state) => {
     }
 
     const findMySlot = activePlayers.find(p => p.ownerName === myProfileName); if (findMySlot) { myControllingPlayer = findMySlot; }
-
     updateAdminDropdown();
     logContainer.innerHTML = ""; if (state.logs) state.logs.forEach(log => appendLogToUI(log));
 
@@ -937,7 +944,7 @@ socket.on("onResetMatch", () => {
 socket.on("onScoreUpdate", (data) => { scoreBlue = data.blue; scoreRed = data.red; document.getElementById("score1").innerText = scoreBlue; document.getElementById("score2").innerText = scoreRed; });
 
 socket.on("onStartMiniGame", (data) => { startMiniGameUI(data); });
-socket.on("onMiniGameGauge", (gauge) => { miniGameGauge = gauge; progressBar.style.width = `${miniGameGauge}%`; });
+socket.on("onMiniGameGauge", (gauge) => { miniGameGauge = gauge; updateGaugeDisplay(miniGameGauge); });
 socket.on("onEndMiniGame", (resultData) => { endMiniGame(resultData); });
 socket.on("onNewLog", (logEntry) => { appendLogToUI(logEntry); });
 

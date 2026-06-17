@@ -164,7 +164,7 @@ io.on('connection', (socket) => {
         room.maxBluePlayers = data.maxBluePlayers; room.maxRedPlayers = data.maxRedPlayers;
         room.globalDefenseLockUntil = 0;
         io.to(currentRoomId).emit('onStartGame', data);
-        addLogToRoom(room, 'system', `경기가 공식적으로 개시되었습니다!`);
+        addLogToRoom(room, 'system', `경기가 시작되었습니다. 다들 뛰어!`);
     });
 
     socket.on('syncTogglePause', () => {

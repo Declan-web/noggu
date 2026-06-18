@@ -9,27 +9,24 @@ const io = new Server(server);
 
 const PORT = 3000;
 
-// 정적 파일 제공 설정
 app.use(express.static(path.join(__dirname)));
 
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// 경기 구역(방)별 데이터를 저장할 객체
 const rooms = {};
 
-// 초기 방 상태 생성 함수
 function createInitialRoomState() {
     return {
-        gameState: "SETUP", // SETUP, PLAYING, MINIGAME, PAUSE
+        gameState: "SETUP",
         scoreBlue: 0,
         scoreRed: 0,
         teamBlueName: "TEAM BLUE",
         teamRedName: "TEAM RED",
         maxBluePlayers: 5,
         maxRedPlayers: 5,
-        registeredOwners: [], // { team, id, ownerName, socketId, skillLevel, x, y, angle }
+        registeredOwners: [],
         directorName: null,
         directorToken: null,
         logs: [],
@@ -41,12 +38,10 @@ function createInitialRoomState() {
     };
 }
 
-// 📌 LOG 필터링 함수: 대괄호 속 [감독 이름], 부임, 경기력 변화 패턴 완벽 차단
 function addLogToRoom(room, message, type) {
-    // 정규식을 활용해 대괄호 내부에 '감독'이 들어가거나 '감독', '경기력' 관련 텍스트가 포함된 로그 원천 배제
     const filterPattern = /\[[^\]]*감독[^\]]*\]|감독|경기력/;
     if (filterPattern.test(message)) {
-        return; // 조건을 만족하면 로그에 추가하지 않고 함수 종료
+        return;
     }
 
     const now = new Date();
@@ -64,7 +59,6 @@ io.on('connection', (socket) => {
     let currentRoomId = null;
     let myRegisteredUser = null;
 
-    // 방 접속 요청 처리
     socket.on('joinRoom', (data) => {
         const { roomId, userName, password, isAutoRefresh } = data;
         
@@ -81,18 +75,15 @@ io.on('connection', (socket) => {
         const room = rooms[currentRoomId];
         socket.join(currentRoomId);
 
-        // 이미 접속 기록이 있는 유저인지 확인 (재연결 처리)
         let existingUser = room.registeredOwners.find(p => p.ownerName === userName);
         
         if (existingUser) {
-            // 소켓 ID 갱신 및 재동기화
             existingUser.socketId = socket.id;
             myRegisteredUser = existingUser;
         }
 
         socket.emit('authResult', { success: true, isAutoRefresh });
         
-        // 현재 방의 상태 전체를 접속한 클라이언트에게 최초 전송
         socket.emit('onInitRoomState', {
             gameState: room.gameState,
             scoreBlue: room.scoreBlue,
@@ -112,12 +103,10 @@ io.on('connection', (socket) => {
         });
     });
 
-    // 선수 등록 처리
     socket.on('syncRegisterOwner', (data) => {
         if (!currentRoomId || !rooms[currentRoomId]) return;
         const room = rooms[currentRoomId];
         
-        // 중복 등록 방지
         const isAlreadyRegistered = room.registeredOwners.some(p => p.ownerName === data.ownerName);
         if (isAlreadyRegistered) return;
 
@@ -141,7 +130,6 @@ io.on('connection', (socket) => {
         if (logEntry) io.to(currentRoomId).emit('onNewLog', logEntry);
     });
 
-    // 감독 권한 인증
     socket.on('syncRegisterDirector', (data) => {
         if (!currentRoomId || !rooms[currentRoomId]) return;
         const room = rooms[currentRoomId];
@@ -158,7 +146,6 @@ io.on('connection', (socket) => {
         if (logEntry) io.to(currentRoomId).emit('onNewLog', logEntry);
     });
 
-    // 경기 인원 설정 변경
     socket.on('syncMatchCapacity', (data) => {
         if (!currentRoomId || !rooms[currentRoomId]) return;
         const room = rooms[currentRoomId];
@@ -166,7 +153,6 @@ io.on('connection', (socket) => {
         room.maxBluePlayers = data.blueMax;
         room.maxRedPlayers = data.redMax;
 
-        // 초과된 슬롯에 할당되어 있던 유저 목록 제거
         room.registeredOwners = room.registeredOwners.filter(p => {
             if (p.team === "BLUE" && p.id > room.maxBluePlayers) return false;
             if (p.team === "RED" && p.id > room.maxRedPlayers) return false;
@@ -176,7 +162,6 @@ io.on('connection', (socket) => {
         io.to(currentRoomId).emit('onMatchCapacityChange', data);
     });
 
-    // 경기 실시간 팀명 변경
     socket.on('syncLiveTeamName', (data) => {
         if (!currentRoomId || !rooms[currentRoomId]) return;
         const room = rooms[currentRoomId];
@@ -190,7 +175,6 @@ io.on('connection', (socket) => {
         io.to(currentRoomId).emit('onLiveTeamName', data);
     });
 
-    // 경기 시작
     socket.on('syncStartGame', (data) => {
         if (!currentRoomId || !rooms[currentRoomId]) return;
         const room = rooms[currentRoomId];
@@ -208,7 +192,6 @@ io.on('connection', (socket) => {
         if (logEntry) io.to(currentRoomId).emit('onNewLog', logEntry);
     });
 
-    // 일시 정지 토글
     socket.on('syncTogglePause', () => {
         if (!currentRoomId || !rooms[currentRoomId]) return;
         const room = rooms[currentRoomId];
@@ -222,7 +205,6 @@ io.on('connection', (socket) => {
         io.to(currentRoomId).emit('onGameStateChange', { state: room.gameState });
     });
 
-    // 플레이어 이동 동기화
     socket.on('syncPlayerMove', (data) => {
         if (!currentRoomId || !rooms[currentRoomId]) return;
         const room = rooms[currentRoomId];
@@ -236,13 +218,11 @@ io.on('connection', (socket) => {
         }
     });
 
-    // 공 상태 변경 동기화 (줍기, 패스, 슛 등)
     socket.on('syncBallAction', (data) => {
         if (!currentRoomId || !rooms[currentRoomId]) return;
         socket.to(currentRoomId).emit('onBallAction', data);
     });
 
-    // 점수 동기화 및 득점 로그 처리
     socket.on('syncScore', (data) => {
         if (!currentRoomId || !rooms[currentRoomId]) return;
         const room = rooms[currentRoomId];
@@ -257,7 +237,6 @@ io.on('connection', (socket) => {
         if (logEntry) io.to(currentRoomId).emit('onNewLog', logEntry);
     });
 
-    // 경기력 등급 변경
     socket.on('syncUpdateSkillLevel', (data) => {
         if (!currentRoomId || !rooms[currentRoomId]) return;
         const room = rooms[currentRoomId];
@@ -273,7 +252,6 @@ io.on('connection', (socket) => {
         }
     });
 
-    // 디펜스 미니게임 시작 조건 발동
     socket.on('syncStartMiniGame', (data) => {
         if (!currentRoomId || !rooms[currentRoomId]) return;
         const room = rooms[currentRoomId];
@@ -282,7 +260,7 @@ io.on('connection', (socket) => {
 
         room.gameState = "MINIGAME";
         room.miniGameGauge = 25;
-        room.miniGameTimer = 5.0; // 5초 카운트다운 초기화
+        room.miniGameTimer = 5.0; // 누가 걸었든 서버 백엔드 타이머 무조건 동기화 가동
         
         room.activeDefender = { team: data.defTeam, id: data.defId };
         room.activeAttacker = { team: data.attTeam, id: data.attId };
@@ -298,7 +276,6 @@ io.on('connection', (socket) => {
         if (logEntry) io.to(currentRoomId).emit('onNewLog', logEntry);
     });
 
-    // 미니게임 실시간 게이지 충전 입력 처리
     socket.on('syncMiniGameHit', (role) => {
         if (!currentRoomId || !rooms[currentRoomId]) return;
         const room = rooms[currentRoomId];
@@ -311,20 +288,18 @@ io.on('connection', (socket) => {
             room.miniGameGauge -= 1;
         }
 
-        // 게이지 경계치 고정
         if (room.miniGameGauge < 1) room.miniGameGauge = 1;
         if (room.miniGameGauge > 49) room.miniGameGauge = 49;
 
         io.to(currentRoomId).emit('onMiniGameGauge', room.miniGameGauge);
     });
 
-    // 미니게임 경합 판단 종료 처리
     socket.on('syncEndMiniGame', (data) => {
         if (!currentRoomId || !rooms[currentRoomId]) return;
         const room = rooms[currentRoomId];
 
         room.gameState = "PLAYING";
-        room.globalDefenseLockUntil = Date.now() + 5000; // 5초 글로벌 쿨타임 발동
+        room.globalDefenseLockUntil = Date.now() + 5000;
 
         const defUser = room.registeredOwners.find(o => o.team === room.activeDefender.team && o.id === room.activeDefender.id);
         const attUser = room.registeredOwners.find(o => o.team === room.activeAttacker.team && o.id === room.activeAttacker.id);
@@ -339,8 +314,6 @@ io.on('connection', (socket) => {
         }
 
         const logEntry = addLogToRoom(room, message, "defense");
-
-        // 결과 클라이언트에 전송 시 쿨타임 필드 포함 처리
         data.globalDefenseLockUntil = room.globalDefenseLockUntil;
         
         io.to(currentRoomId).emit('onEndMiniGame', data);
@@ -350,7 +323,6 @@ io.on('connection', (socket) => {
         room.activeAttacker = null;
     });
 
-    // 감독 공지 및 채팅 메시지 브로드캐스팅
     socket.on('sendDirectorChat', (text) => {
         if (!currentRoomId || !rooms[currentRoomId]) return;
         const room = rooms[currentRoomId];
@@ -359,7 +331,6 @@ io.on('connection', (socket) => {
         if (logEntry) io.to(currentRoomId).emit('onNewLog', logEntry);
     });
 
-    // 로그 초기화 요청
     socket.on('syncClearLogs', () => {
         if (!currentRoomId || !rooms[currentRoomId]) return;
         const room = rooms[currentRoomId];
@@ -367,18 +338,15 @@ io.on('connection', (socket) => {
         io.to(currentRoomId).emit('onClearLogs');
     });
 
-    // 경기 초기화 및 전체 포맷 처리
     socket.on('syncResetMatch', () => {
         if (!currentRoomId || !rooms[currentRoomId]) return;
         rooms[currentRoomId] = createInitialRoomState();
         io.to(currentRoomId).emit('onResetMatch');
     });
 
-    // 소켓 접속 종료 핸들러
     socket.on('disconnect', () => {
         if (currentRoomId && rooms[currentRoomId] && myRegisteredUser) {
             const room = rooms[currentRoomId];
-            // 오프라인 상태가 되었을 때의 예외 안전 조치로 할당 해제 처리
             room.registeredOwners = room.registeredOwners.filter(p => p.socketId !== socket.id);
             
             const logEntry = addLogToRoom(room, `${myRegisteredUser.ownerName} 선수가 경기장망에서 나갔습니다.`, "chat");
@@ -393,12 +361,12 @@ io.on('connection', (socket) => {
     });
 });
 
-// 타이머 백엔드 정밀 연동 검증용 루프 구현 (디펜스 미니게임 시간 관리 전용)
+// 📌 핵심 수정: 감독 접속 유무 관계없이 서버에서 미니게임 제한 시간 연산 무조건 실행
 setInterval(() => {
     Object.keys(rooms).forEach(roomId => {
         const room = rooms[roomId];
         if (room.gameState === "MINIGAME") {
-            room.miniGameTimer -= 0.05; // 50ms마다 감소
+            room.miniGameTimer -= 0.05; 
             if (room.miniGameTimer <= 0) {
                 const defGauge = room.miniGameGauge;
                 const attGauge = 50 - room.miniGameGauge;

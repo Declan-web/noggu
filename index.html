@@ -93,17 +93,17 @@
         }
         #cutIn.active { transform: translate(-50%, -50%) scale(1); }
         
-        /* 📌 팝업 레이아웃 스타일 원상 복구 및 항상 절대 좌표 고정 */
+        /* 📌 디펜스 게임 팝업 창 스타일 고정 (image_fc19e5.png 기반 복구) */
         #miniGameUI {
-            position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
-            background: rgba(0,0,0,0.95); padding: 15px 25px; border-radius: 12px;
-            border: 3px solid #f1c40f; text-align: center; display: none; z-index: 999;
-            touch-action: none; width: 85%; max-width: 360px; box-sizing: border-box;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.8);
+            position: absolute; top: 30px; left: 50%; transform: translateX(-50%);
+            background: #110f0c; padding: 18px 25px; border-radius: 16px;
+            border: 2px solid #ffcc00; text-align: center; display: none; z-index: 999;
+            touch-action: none; width: 90%; max-width: 440px; box-sizing: border-box;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.9);
         }
-        .progress-bar { width: 100%; height: 26px; background-color: #333; border-radius: 6px; overflow: hidden; margin-top: 10px; border: 2px solid #fff; position: relative; }
-        #progress { width: 50%; height: 100%; background-color: #3498db; transition: width 0.04s ease-out; }
-        #gaugeTextInfo { position: absolute; width: 100%; top: 0; left: 0; height: 100%; display: flex; justify-content: space-between; align-items: center; padding: 0 10px; box-sizing: border-box; font-size: 12px; font-weight: bold; color: #fff; text-shadow: 1px 1px 2px #000; pointer-events: none; }
+        .progress-container { width: 100%; height: 28px; background-color: #e74c3c; border-radius: 6px; overflow: hidden; margin-top: 12px; border: 2px solid #fff; position: relative; box-sizing: border-box; }
+        #progressFiller { width: 50%; height: 100%; background-color: #3498db; transition: width 0.04s ease-out; }
+        #gaugeTextInfo { position: absolute; width: 100%; top: 0; left: 0; height: 100%; display: flex; justify-content: space-between; align-items: center; padding: 0 12px; box-sizing: border-box; font-size: 13px; font-weight: bold; color: #fff; text-shadow: 1px 1px 2px #000; pointer-events: none; }
         #miniGameClickZone { display: none; margin-top: 12px; }
         .mini-tap-btn { width: 100%; padding: 10px; background: #f39c12; color: #fff; font-size: 16px; font-weight: bold; border-radius: 6px; cursor: pointer; border: none; }
         .mini-tap-btn:active { background: #d35400; }
@@ -227,17 +227,18 @@
         <div id="gameContainer">
             <div id="cutIn">디펜스!!</div>
             
+            <!-- 📌 image_fc19e5.png 팝업 디자인 명세 100% 매칭 구조 정의 -->
             <div id="miniGameUI">
-                <div id="miniGameTitle" style="font-weight:bold; font-size:15px; color:#f1c40f;">🔥 디펜스 실시간 경합 🔥</div>
-                <div class="progress-bar">
-                    <div id="progress"></div>
+                <div id="miniGameTitle" style="font-weight:bold; font-size:16px; color:#ffffff; letter-spacing: 0.5px;">🔥 디펜스 게임 🔥</div>
+                <div class="progress-container">
+                    <div id="progressFiller"></div>
                     <div id="gaugeTextInfo">
-                        <span id="leftTeamGaugeValue" style="color:#fff;">BLUE: 25</span>
-                        <span id="rightTeamGaugeValue" style="color:#fff;">RED: 25</span>
+                        <span id="leftTeamGaugeValue" style="color:#fff;">수비: 25</span>
+                        <span id="rightTeamGaugeValue" style="color:#fff;">공격: 25</span>
                     </div>
                 </div>
-                <div id="miniGameVS" style="font-size:12px; margin-top:6px; color:#eee; font-weight:bold;">팀 VS 팀</div>
-                <div id="miniGameClickZone"><button class="mini-tap-btn" id="miniTapButton">PUSH!!</button></div>
+                <div id="miniGameVS" style="font-size:13px; margin-top:8px; color:#cccccc; font-weight:bold; letter-spacing: 0.3px;">[수비] 수비수 VS [공격] .</div>
+                <div id="miniGameClickZone" style="margin-top: 10px;"><button class="mini-tap-btn" id="miniTapButton">PUSH!!</button></div>
             </div>
             
             <canvas id="gameCanvas" width="1000" height="500" tabindex="1"></canvas>
@@ -282,8 +283,11 @@ let myProfilePassword = "";
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 const cutIn = document.getElementById("cutIn");
+
+// 📌 중복 탐색 제거 및 변수 참조 오류 원천 차단 개조 완료
 const miniGameUI = document.getElementById("miniGameUI");
-const progressBar = document.getElementById("progress");
+const progressFiller = document.getElementById("progressFiller");
+
 const miniGameClickZone = document.getElementById("miniGameClickZone");
 const miniTapButton = document.getElementById("miniTapButton");
 const statusText = document.getElementById("statusText");
@@ -551,7 +555,7 @@ function updatePlayerSkill() {
 
 function authReferee() {
     const inputName = document.getElementById("refName").value.trim(); const inputKey = document.getElementById("refKey").value;
-    if (!inputName) { alert("감독 이름을 입력해 주세요!"); return; }
+    if (!inputName) { alert("監督 이름을 입력해 주세요!"); return; }
     if (inputKey === "483010") { socket.emit("syncRegisterDirector", { name: inputName, token: "DIR_TOKEN_" + myProfileName }); } 
     else { alert("잘못된 심판 코드입니다!"); }
 }
@@ -611,7 +615,7 @@ function sendDirectorChat() {
 function appendLogToUI(log) {
     if (!log || !log.message) return;
     
-    const filterPattern = /\[[^\]]*감독[^\]]*\]|감독|경기력/;
+    const filterPattern = /\[[^\]]*監督[^\]]*\]|監督|경기력/;
     if (filterPattern.test(log.message)) {
         return;
     }
@@ -805,7 +809,7 @@ function drawCourt() {
     ctx.beginPath(); ctx.arc(court.rightGoal.x, court.rightGoal.y, court.rightGoal.radius, 0, Math.PI * 2); ctx.stroke(); ctx.fillStyle = "#ffea00"; ctx.fill();
 }
 
-// 📌 게이지 팝업 활성화 원상 패치: 어떤 상태든 미니게임 UI 창을 강제로 block 처리해 무조건 띄웁니다.
+// 📌 팝업 활성화 구문 원천 차단 오류 전면 수정 패치 완료
 function startMiniGameUI(data) {
     gameState = "MINIGAME";
     activeDefender = activePlayers.find(p => p.team === data.defTeam && p.id === data.defId);
@@ -813,27 +817,14 @@ function startMiniGameUI(data) {
     
     const defName = activeDefender?.ownerName || "수비수";
     const attName = activeAttacker?.ownerName || "공격수";
-    
-    const defTeamName = data.defTeam === "BLUE" ? teamBlueName : teamRedName;
-    const attTeamName = data.attTeam === "BLUE" ? teamBlueName : teamRedName;
-    const defColor = data.defTeam === "BLUE" ? "#3498db" : "#e74c3c";
-    const attColor = data.attTeam === "BLUE" ? "#3498db" : "#e74c3c";
 
-    const leftTextEl = document.getElementById("leftTeamGaugeValue");
-    const rightTextEl = document.getElementById("rightTeamGaugeValue");
-    
-    leftTextEl.style.color = defColor;
-    rightTextEl.style.color = attColor;
-
-    progressBar.style.backgroundColor = attColor;
-    progressBar.querySelector("#progress").style.backgroundColor = defColor;
-
-    document.getElementById("miniGameVS").innerText = `[${defTeamName}] ${defName} VS [${attTeamName}] ${attName}`;
+    // 📌 image_fc19e5.png 기반 스트링 매칭 포맷 고정
+    document.getElementById("miniGameVS").innerText = `[수비] ${defName} VS [공격] ${attName}`;
     
     const amIDefender = (myControllingPlayer && myControllingPlayer.team === data.defTeam && myControllingPlayer.id === data.defId);
     const amIAttacker = (myControllingPlayer && myControllingPlayer.team === data.attTeam && myControllingPlayer.id === data.attId);
     
-    // 📌 강제 노출 패치: 실시간 연타 현황을 보여주는 팝업창을 무조건 화면에 띄웁니다.
+    // 이제 정상 작동하여 강제 렌더링 블록 처리 진행
     miniGameUI.style.display = "block";
 
     if ((amIDefender || amIAttacker) && isMobileDevice) {
@@ -848,20 +839,13 @@ function startMiniGameUI(data) {
     cutIn.classList.add("active"); setTimeout(() => { cutIn.classList.remove("active"); }, 900);
 }
 
-// 📌 실시간 게이지 변화 출력 함수
+// 📌 image_fc19e5.png 구조와 100% 동일한 수비:XX / 공격:XX 실시간 갱신 처리 완료
 function updateGaugeDisplay(gaugeValue) {
     const pct = (gaugeValue / 50) * 100;
-    progressBar.querySelector("#progress").style.width = `${pct}%`;
+    progressFiller.style.width = `${pct}%`;
     
-    if (activeDefender && activeAttacker) {
-        const defTeamName = activeDefender.team === "BLUE" ? teamBlueName : teamRedName;
-        const attTeamName = activeAttacker.team === "BLUE" ? teamBlueName : teamRedName;
-        document.getElementById("leftTeamGaugeValue").innerText = `${defTeamName}: ${gaugeValue}`;
-        document.getElementById("rightTeamGaugeValue").innerText = `${50 - gaugeValue} :${attTeamName}`;
-    } else {
-        document.getElementById("leftTeamGaugeValue").innerText = `수비: ${gaugeValue}`;
-        document.getElementById("rightTeamGaugeValue").innerText = `${50 - gaugeValue} :공격`;
-    }
+    document.getElementById("leftTeamGaugeValue").innerText = `수비: ${gaugeValue}`;
+    document.getElementById("rightTeamGaugeValue").innerText = `공격: ${50 - gaugeValue}`;
 }
 
 function endMiniGame(resultData) {

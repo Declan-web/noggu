@@ -360,8 +360,9 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => {});
 });
 
-// 📌 [수정완료] 최신 Express 버전에 맞춰 예외 처리 와일드카드 문법을 바꿨습니다!
-app.get('/:any*', (req, res) => {
+// 📌 [완벽 방어] 오류의 소지가 있는 문자열 주소 패턴 검사를 거치지 않고, 
+// 상단에 정의되지 않은 모든 엉뚱한 요청은 무조건 index.html을 보여주도록 미들웨어 처리했습니다.
+app.use((req, res) => {
     sendIndexHtml(req, res);
 });
 

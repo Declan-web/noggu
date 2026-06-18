@@ -99,7 +99,9 @@
             border: 3px solid #f1c40f; text-align: center; display: none; z-index: 25;
             touch-action: none; width: 80%; max-width: 340px; box-sizing: border-box;
         }
-        .progress-bar { width: 100%; height: 24px; background-color: #e74c3c; border-radius: 6px; overflow: hidden; margin-top: 10px; border: 2px solid #fff; position: relative; }
+        /* 기본 배경색 제거(양측 채우기 변동 배경화 적용) */
+        .progress-bar { width: 100%; height: 24px; background-color: #333; border-radius: 6px; overflow: hidden; margin-top: 10px; border: 2px solid #fff; position: relative; }
+        /* 게이지 엘리먼트 초기화 (동적 인라인 스타일 처리) */
         #progress { width: 50%; height: 100%; background-color: #3498db; transition: width 0.04s ease-out; }
         #gaugeTextInfo { position: absolute; width: 100%; top: 0; left: 0; height: 100%; display: flex; justify-content: space-between; align-items: center; padding: 0 8px; box-sizing: border-box; font-size: 11px; font-weight: bold; color: #fff; text-shadow: 1px 1px 2px #000; pointer-events: none; }
         #miniGameClickZone { display: none; margin-top: 12px; }
@@ -147,7 +149,8 @@
     </style>
     <script src="/socket.io/socket.io.js"></script>
 </head>
-<body>
+<!-- 마우스 우클릭 시의 브라우저 기본 컨텍스트 메뉴 출력을 완전히 무력화 -->
+<body oncontextmenu="return false;">
 
     <div id="roomEntrance">
         <div class="entrance-box">
@@ -225,15 +228,15 @@
         <div id="gameContainer">
             <div id="cutIn">디펜스!!</div>
             <div id="miniGameUI">
-                <div id="miniGameTitle" style="font-weight:bold; font-size:14px;">🔥 디펜스 게임 🔥</div>
+                <div id="miniGameTitle" style="font-weight:bold; font-size:14px;">🔥 디펜스 경합 🔥</div>
                 <div class="progress-bar">
                     <div id="progress"></div>
                     <div id="gaugeTextInfo">
-                        <span id="defGaugeValue">수비: 25</span>
-                        <span id="attGaugeValue">공격: 25</span>
+                        <span id="leftTeamGaugeValue" style="color:#fff;">BLUE: 25</span>
+                        <span id="rightTeamGaugeValue" style="color:#fff;">RED: 25</span>
                     </div>
                 </div>
-                <div id="miniGameVS" style="font-size:11px; margin-top:5px; color:#ccc;">수비수 VS 공격수</div>
+                <div id="miniGameVS" style="font-size:11px; margin-top:5px; color:#ccc;">팀 VS 팀</div>
                 <div id="miniGameClickZone"><button class="mini-tap-btn" id="miniTapButton">PUSH!!</button></div>
             </div>
             <canvas id="gameCanvas" width="1000" height="500" tabindex="1"></canvas>
@@ -335,8 +338,8 @@ function submitRoomAuth(isAutoRefresh = false) {
         rCode = document.getElementById("roomCodeSelect").value;
         uName = document.getElementById("roomUserNameInput").value.trim();
         uPass = document.getElementById("roomUserPasswordInput").value.trim();
-        if(!uName) { alert("유저 참관명을 입력해 주세요!"); return; }
-        if(!uPass || uPass.length !== 4 || isNaN(uPass)) { alert("숫자 4자리의 비밀번호를 정확히 입력해 주세요!"); return; }
+        if(!uName) { alert("유저 참관명(본인 실명)을 입력해 주세요!"); return; }
+        if(!uPass || uPass.length !== 4 || isNaN(uPass)) { alert("비밀번호 숫자 4자리를 입력해 주세요!"); return; }
     }
     targetRoomId = rCode; myProfileName = uName; myProfilePassword = uPass;
     socket.emit('joinRoom', { roomId: targetRoomId, userName: myProfileName, password: myProfilePassword, isAutoRefresh: isAutoRefresh });
@@ -619,10 +622,6 @@ function appendLogToUI(log) {
     logContainer.scrollTop = logContainer.scrollHeight;
 }
 
-document.addEventListener("contextmenu", e => { e.preventDefault(); });
-canvas.addEventListener("contextmenu", e => { e.preventDefault(); });
-document.getElementById("gameContainer").addEventListener("contextmenu", e => { e.preventDefault(); });
-
 function processMiniGameTap() {
     if (gameState !== "MINIGAME" || !myControllingPlayer) return;
     const p = myControllingPlayer;
@@ -638,18 +637,18 @@ function processMiniGameTap() {
 miniGameUI.addEventListener("pointerdown", e => { if(e.target !== miniTapButton) { e.preventDefault(); processMiniGameTap(); } });
 miniTapButton.addEventListener("click", e => { e.preventDefault(); e.stopPropagation(); processMiniGameTap(); });
 
+// 📌 핵심 조작 통합: 마우스 클릭 리스너 분기 강화 (우클릭 연타 버그 완벽 차단)
 canvas.addEventListener("mousedown", e => {
     canvas.focus();
     
+    // 미니게임 상태일 때 마우스 우클릭(2) 혹은 좌클릭(0) 연타 경쟁 완벽 보정
     if (gameState === "MINIGAME") {
         e.preventDefault();
-        if (e.button === 2) { 
-            processMiniGameTap(); 
-        }
+        processMiniGameTap();
         return;
     }
     
-    if (e.button === 0) {
+    if (e.button === 0) { // 좌클릭 전용 로직
         const rect = canvas.getBoundingClientRect();
         const mouseX = ((e.clientX - rect.left) / rect.width) * canvas.width;
         const mouseY = ((e.clientY - rect.top) / rect.height) * canvas.height;
@@ -792,7 +791,6 @@ function gameLoop(currentTime) {
         }
         ball.update(dt);
     }
-    // 📌 핵심 수정: 클라이언트 사이드 gameLoop 내 독립 검사 분기를 제거하고 오직 서버 동기화에만 타이머 흐름을 위임하도록 변경 (감독 유무 제한 완벽 파괴)
     ctx.clearRect(0, 0, canvas.width, canvas.height); drawCourt(); activePlayers.forEach(p => p.draw()); ball.draw();
     requestAnimationFrame(gameLoop);
 }
@@ -808,14 +806,33 @@ function drawCourt() {
     ctx.beginPath(); ctx.arc(court.rightGoal.x, court.rightGoal.y, court.rightGoal.radius, 0, Math.PI * 2); ctx.stroke(); ctx.fillStyle = "#ffea00"; ctx.fill();
 }
 
+// 📌 핵심 수정: 미니게임 진입 시 동적 팀명/컬러 연동 주입 파트
 function startMiniGameUI(data) {
     gameState = "MINIGAME";
-    activeDefender = activePlayers.find(p => p.team === data.defTeam && p.id === data.id);
+    activeDefender = activePlayers.find(p => p.team === data.defTeam && p.id === data.defId);
     activeAttacker = activePlayers.find(p => p.team === data.attTeam && p.id === data.attId);
     
     const defName = activeDefender?.ownerName || "수비수";
     const attName = activeAttacker?.ownerName || "공격수";
-    document.getElementById("miniGameVS").innerText = `[수비] ${defName} VS [공격] ${attName}`;
+    
+    // 수비팀과 공격팀의 실제 동적 명칭과 고유 색상 추출
+    const defTeamName = data.defTeam === "BLUE" ? teamBlueName : teamRedName;
+    const attTeamName = data.attTeam === "BLUE" ? teamBlueName : teamRedName;
+    const defColor = data.defTeam === "BLUE" ? "#3498db" : "#e74c3c";
+    const attColor = data.attTeam === "BLUE" ? "#3498db" : "#e74c3c";
+
+    // 게이지 내부 좌우 텍스트 배치를 팀 색상 및 명칭과 완벽 매칭
+    const leftTextEl = document.getElementById("leftTeamGaugeValue");
+    const rightTextEl = document.getElementById("rightTeamGaugeValue");
+    
+    leftTextEl.style.color = defColor;
+    rightTextEl.style.color = attColor;
+
+    // 양측 배경색 충돌 바 구성 (왼쪽은 수비팀 색상, 오른쪽 전체 배경은 공격팀 색상)
+    progressBar.style.backgroundColor = attColor;
+    progressBar.querySelector("#progress").style.backgroundColor = defColor;
+
+    document.getElementById("miniGameVS").innerText = `[${defTeamName}] ${defName} VS [${attTeamName}] ${attName}`;
     
     const amIDefender = (myControllingPlayer && myControllingPlayer.team === data.defTeam && myControllingPlayer.id === data.defId);
     const amIAttacker = (myControllingPlayer && myControllingPlayer.team === data.attTeam && myControllingPlayer.id === data.attId);
@@ -835,9 +852,17 @@ function startMiniGameUI(data) {
 
 function updateGaugeDisplay(gaugeValue) {
     const pct = (gaugeValue / 50) * 100;
-    progressBar.style.width = `${pct}%`;
-    document.getElementById("defGaugeValue").innerText = `수비: ${gaugeValue}`;
-    document.getElementById("attGaugeValue").innerText = `공격: ${50 - gaugeValue}`;
+    progressBar.querySelector("#progress").style.width = `${pct}%`;
+    
+    if (activeDefender && activeAttacker) {
+        const defTeamName = activeDefender.team === "BLUE" ? teamBlueName : teamRedName;
+        const attTeamName = activeAttacker.team === "BLUE" ? teamBlueName : teamRedName;
+        document.getElementById("leftTeamGaugeValue").innerText = `${defTeamName}: ${gaugeValue}`;
+        document.getElementById("rightTeamGaugeValue").innerText = `${50 - gaugeValue}: ${attTeamName}`;
+    } else {
+        document.getElementById("leftTeamGaugeValue").innerText = `수비: ${gaugeValue}`;
+        document.getElementById("rightTeamGaugeValue").innerText = `${50 - gaugeValue} :공격`;
+    }
 }
 
 function endMiniGame(resultData) {

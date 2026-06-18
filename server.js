@@ -186,7 +186,7 @@ io.on('connection', (socket) => {
         room.maxRedPlayers = data.maxRedPlayers;
         room.globalDefenseLockUntil = 0;
 
-        const logEntry = addLogToRoom(room, "경기가 시작되었습니다. 다들 뛰어!", "chat");
+        const logEntry = addLogToRoom(room, "시작 신호가 울렸습니다! 경기를 시작합니다.", "chat");
 
         io.to(currentRoomId).emit('onStartGame', data);
         if (logEntry) io.to(currentRoomId).emit('onNewLog', logEntry);
@@ -231,7 +231,7 @@ io.on('connection', (socket) => {
         room.scoreRed = data.red;
 
         const scoringTeamName = data.scoringTeam === "BLUE" ? room.teamBlueName : room.teamRedName;
-        const logEntry = addLogToRoom(room, `[${scoringTeamName}]팀이 2점을 획득했습니다.`, "score");
+        const logEntry = addLogToRoom(room, `🎉 슛 성공! [${scoringTeamName}]팀이 2점을 획득했습니다.`, "score");
 
         io.to(currentRoomId).emit('onScoreUpdate', { blue: room.scoreBlue, red: room.scoreRed });
         if (logEntry) io.to(currentRoomId).emit('onNewLog', logEntry);
@@ -260,7 +260,7 @@ io.on('connection', (socket) => {
 
         room.gameState = "MINIGAME";
         room.miniGameGauge = 25;
-        room.miniGameTimer = 5.0; // 누가 걸었든 서버 백엔드 타이머 무조건 동기화 가동
+        room.miniGameTimer = 5.0; // 감독 유무 상관없이 무조건 5초 백엔드 가동
         
         room.activeDefender = { team: data.defTeam, id: data.defId };
         room.activeAttacker = { team: data.attTeam, id: data.attId };
@@ -270,7 +270,7 @@ io.on('connection', (socket) => {
         const defName = defUser ? defUser.ownerName : `선수 ${data.defId}`;
         const attName = attUser ? attUser.ownerName : `선수 ${data.attId}`;
 
-        const logEntry = addLogToRoom(room, `🔥 마우스 우클릭 혹은 화면을 연타하세요! 🔥`, "defense");
+        const logEntry = addLogToRoom(room, `🔥 [${defName}] 대 [${attName}] 디펜스 경합 경기가 선언되었습니다! (5초간 연타)`, "defense");
 
         io.to(currentRoomId).emit('onStartMiniGame', data);
         if (logEntry) io.to(currentRoomId).emit('onNewLog', logEntry);
@@ -282,6 +282,7 @@ io.on('connection', (socket) => {
 
         if (room.gameState !== "MINIGAME") return;
 
+        // 게이지 방향 정의: 수비가 성공하면 게이지 증가(+), 공격이 수비 뚫으면 게이지 감소(-)
         if (role === "DEFENDER") {
             room.miniGameGauge += 1;
         } else if (role === "ATTACKER") {
@@ -308,9 +309,9 @@ io.on('connection', (socket) => {
 
         let message = "";
         if (data.isDefWin) {
-            message = `수비 성공! [${defName}] 선수가 공의 소유권을 빼앗아 옵니다.`;
+            message = `🛡 수비 성공! [${defName}] 선수가 공을 빼앗아 가로챘습니다. (수비 득표: ${data.defGauge} vs 공격 득표: ${data.attGauge})`;
         } else {
-            message = `수비 실패! [${attName}] 선수가 공의 소유권을 유지합니다.`;
+            message = `⚡ 수비 실패! [${attName}] 선수가 철벽 방어를 뚫고 드라이브를 유지합니다. (수비 득표: ${data.defGauge} vs 공격 득표: ${data.attGauge})`;
         }
 
         const logEntry = addLogToRoom(room, message, "defense");
@@ -361,7 +362,7 @@ io.on('connection', (socket) => {
     });
 });
 
-// 📌 핵심 수정: 감독 접속 유무 관계없이 서버에서 미니게임 제한 시간 연산 무조건 실행
+// 감독 사이트 브라우징 여부와 관계없이 독자 구동되는 서버 루프 엔진
 setInterval(() => {
     Object.keys(rooms).forEach(roomId => {
         const room = rooms[roomId];
@@ -389,11 +390,11 @@ setInterval(() => {
                 let holderTeam = null;
 
                 if (isDefWin) {
-                    message = `수비 성공! [${defName}] 선수가 공의 소유권을 빼앗아 옵니다.`;
+                    message = `🛡 수비 성공! [${defName}] 선수가 공을 빼앗아 가로챘습니다. (수비 득표: ${defGauge} vs 공격 득표: ${attGauge})`;
                     holderId = room.activeDefender.id;
                     holderTeam = room.activeDefender.team;
                 } else {
-                    message = `수비 실패! [${attName}] 선수가 공의 소유권을 유지합니다.`;
+                    message = `⚡ 수비 실패! [${attName}] 선수가 철벽 방어를 뚫고 드라이브를 유지합니다. (수비 득표: ${defGauge} vs 공격 득표: ${attGauge})`;
                     holderId = room.activeAttacker.id;
                     holderTeam = room.activeAttacker.team;
                 }

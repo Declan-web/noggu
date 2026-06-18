@@ -12,17 +12,24 @@ const io = new Server(server, {
     }
 });
 
+// 정적 파일 서버 디렉터리 바인딩
 app.use(express.static(path.join(__dirname, 'public')));
 
-// 기본 루트 라우터 및 미디에이터 핸들러 복구
+// 기본 인덱스 라우팅 처리
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// 글로벌 경기 구역 저장소 (0001, 0002 등)
+// 글로벌 경기 구역 인메모리 데이터베이스 (0001, 0002 등)
 const roomsData = {};
 
-// 방 초기화 및 규격 데이터 생성기
+// 📌 [고정 상수] 경기장 규격 및 물리 상수 정의
+const COURT_WIDTH = 1000;
+const COURT_HEIGHT = 500;
+const BALL_MAX_SPEED = 25;
+const FRICTION = 0.98;
+
+// 방 초기화 및 상세 규격 데이터 스키마 생성기 (물리 엔진 상태 포함)
 function getOrCreateRoom(roomId) {
     if (!roomsData[roomId]) {
         roomsData[roomId] = {
@@ -41,6 +48,7 @@ function getOrCreateRoom(roomId) {
             activeAttacker: null,
             registeredOwners: [], // { team, id, ownerName, password, socketId, x, y, angle, skillLevel }
             logs: [],
+            // 서버 측 2차 검증을 위한 공의 물리 상태 구조체 복구
             ballState: {
                 x: 500,
                 y: 250,
@@ -49,28 +57,64 @@ function getOrCreateRoom(roomId) {
                 holderId: null,
                 holderTeam: null,
                 isFlying: false,
-                lastShooterSkill: 5.0
+                lastShooterSkill: 5.0,
+                lastUpdate: Date.now()
             }
         };
     }
     return roomsData[roomId];
 }
 
-// 로그 시스템 모듈화
+// 실시간 이벤트 로그 오버플로우 방지 모듈
 function addLog(room, type, message) {
     const now = new Date();
     const timestamp = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
     const logEntry = { type, message, timestamp };
     room.logs.push(logEntry);
-    if (room.logs.length > 40) room.logs.shift();
+    if (room.logs.length > 40) room.logs.shift(); // 40개 초과 시 최하단 로그 제거
     return logEntry;
 }
 
+// 📌 [서버 측 물리 시뮬레이션 루프] 관전자 및 새로고침 유저의 싱크를 강제로 유지하기 위한 보조 업데이트
+setInterval(() => {
+    Object.keys(roomsData).forEach(roomId => {
+        const room = roomsData[roomId];
+        if (room.gameState !== "PLAYING" || room.ballState.holderId) return;
+
+        const ball = room.ballState;
+        if (ball.isFlying) {
+            // 마찰력 및 위치 업데이트 계산
+            ball.x += ball.vx;
+            ball.y += ball.vy;
+            ball.vx *= FRICTION;
+            ball.vy *= FRICTION;
+
+            // 벽면 충돌 및 바운드 튕김 정밀 연산
+            if (ball.x < 8 || ball.x > COURT_WIDTH - 8) {
+                ball.vx *= -1;
+                ball.x = ball.x < 8 ? 8 : COURT_WIDTH - 8;
+            }
+            if (ball.y < 8 || ball.y > COURT_HEIGHT - 8) {
+                ball.vy *= -1;
+                ball.y = ball.y < 8 ? 8 : COURT_HEIGHT - 8;
+            }
+
+            // 속도가 임계값 이하로 떨어지면 정지 처리
+            if (Math.abs(ball.vx) < 0.1 && Math.abs(ball.vy) < 0.1) {
+                ball.vx = 0;
+                ball.vy = 0;
+                ball.isFlying = false;
+            }
+        }
+    });
+}, 1000 / 60); // 60FPS 하이브리드 서버 틱 동기화
+
+// 소켓 네트워크 레이어 실시간 핸들링
 io.on('connection', (socket) => {
     let currentRoomId = null;
     let userProfileName = null;
 
-    // 방 진입 및 인증 처리
+    // 방 진입 및 세션 인증 디스패처
     socket.on('joinRoom', (data) => {
         const { roomId, userName, password, isAutoRefresh } = data;
         if (!roomId || !userName) {
@@ -83,33 +127,33 @@ io.on('connection', (socket) => {
 
         const room = getOrCreateRoom(roomId);
 
-        // 📌 새로고침 유저 구출 로직: 소켓 ID가 바뀌었더라도 같은 이름의 선수가 등록되어 있다면 소켓 매칭 업데이트
+        // 📌 [새로고침 구출 아키텍처] 기존 등록 데이터의 소켓 아이디만 실시간으로 교체
         const existingPlayer = room.registeredOwners.find(p => p.ownerName === userName);
         if (existingPlayer) {
             existingPlayer.socketId = socket.id;
         }
 
-        // 감독 토큰 복구 지원
+        // 감독 토큰 생존 유효성 검사
         if (room.directorName === userName && room.directorToken === "DIR_TOKEN_" + userName) {
-            // 감독 권한 유지됨
+            // 기존 권한 자동 인계됨
         }
 
         socket.emit('authResult', { success: true, isAutoRefresh });
         
-        // 최신 방 전체 데이터 발송 (기존 위치 및 정보 포함)
+        // 새로고침한 브라우저에 서버 세션 저장소의 원본 스냅샷 전송
         socket.emit('onInitRoomState', room);
     });
 
-    // 선수 포지션 등록 및 동기화
+    // 선수 포지션 등록 및 배치 제어
     socket.on('syncRegisterOwner', (data) => {
         if (!currentRoomId) return;
         const room = getOrCreateRoom(currentRoomId);
         
-        // 중복 등록 차단 (이름 기준 예외 제어)
+        // 본인 실명 기반 1인 1슬롯 중복 등록 차단 예외 처리
         const duplicate = room.registeredOwners.find(p => p.ownerName === data.ownerName);
         if (duplicate && data.ownerName !== "") return;
 
-        // 기존 슬롯 데이터 청소 및 안전 리프레시
+        // 타 유저가 해당 슬롯을 차지하고 있을 경우 기존 등록 정보 오버라이드 청소
         room.registeredOwners = room.registeredOwners.filter(p => !(p.team === data.team && p.id === data.id));
 
         if (data.ownerName !== "") {
@@ -139,7 +183,7 @@ io.on('connection', (socket) => {
         });
     });
 
-    // 실시간 캐릭터 이동 좌표 수신 및 브로드캐스팅 (서버 메모리 실시간 기록)
+    // 실시간 캐릭터 이동 좌표 동기화 (서버 세션 버퍼에 실시간 백업)
     socket.on('syncPlayerMove', (data) => {
         if (!currentRoomId) return;
         const room = getOrCreateRoom(currentRoomId);
@@ -152,7 +196,7 @@ io.on('connection', (socket) => {
         socket.to(currentRoomId).emit('onPlayerMove', data);
     });
 
-    // 공의 액션 동기화 (위치, 속도, 소유권 덤프 백업 데이터)
+    // 공의 소유권 전환, 슛, 패스 물리 백업 트래커
     socket.on('syncBallAction', (data) => {
         if (!currentRoomId) return;
         const room = getOrCreateRoom(currentRoomId);
@@ -169,7 +213,7 @@ io.on('connection', (socket) => {
         socket.to(currentRoomId).emit('onBallAction', data);
     });
 
-    // 경기 정원 동기화
+    // 경기 출전 제한 인원 실시간 제한 동기화
     socket.on('syncMatchCapacity', (data) => {
         if (!currentRoomId) return;
         const room = getOrCreateRoom(currentRoomId);
@@ -178,7 +222,7 @@ io.on('connection', (socket) => {
         io.to(currentRoomId).emit('onMatchCapacityChange', data);
     });
 
-    // 팀 실명 명칭 변경 동기화
+    // 팀 실명 설정 변경 액션 반영
     socket.on('syncLiveTeamName', (data) => {
         if (!currentRoomId) return;
         const room = getOrCreateRoom(currentRoomId);
@@ -187,7 +231,7 @@ io.on('connection', (socket) => {
         socket.to(currentRoomId).emit('onLiveTeamName', data);
     });
 
-    // 경기 시작 조율 및 초기 셋업
+    // 경기 구역 셋업 마감 및 시합 개시 트리거
     socket.on('syncStartGame', (data) => {
         if (!currentRoomId) return;
         const room = getOrCreateRoom(currentRoomId);
@@ -203,7 +247,7 @@ io.on('connection', (socket) => {
         io.to(currentRoomId).emit('onNewLog', log);
     });
 
-    // 일시정지 제어 핸들러
+    // 시합 일시 중단 및 재개 플래그 전환
     socket.on('syncTogglePause', () => {
         if (!currentRoomId) return;
         const room = getOrCreateRoom(currentRoomId);
@@ -215,14 +259,14 @@ io.on('connection', (socket) => {
         io.to(currentRoomId).emit('onGameStateChange', { state: room.gameState });
     });
 
-    // 매치 완전 리셋 (오직 리셋 버튼 클릭시에만 전체 데이터 메모리 소멸)
+    // 경기 구역 메모리 포맷 및 하드 리셋 (리셋 연동 버튼 입력 시에만 실행)
     socket.on('syncResetMatch', () => {
         if (!currentRoomId) return;
         delete roomsData[currentRoomId];
         io.to(currentRoomId).emit('onResetMatch');
     });
 
-    // 스코어 실시간 업데이트 동기화 및 전광판 로깅
+    // 득점 현황 수신 및 로그 기록 전송
     socket.on('syncScore', (data) => {
         if (!currentRoomId) return;
         const room = getOrCreateRoom(currentRoomId);
@@ -235,7 +279,7 @@ io.on('connection', (socket) => {
         io.to(currentRoomId).emit('onNewLog', log);
     });
 
-    // 경기력 등급 데이터 세부 조율
+    // 특정 유저의 경기력 수치 정밀 조정
     socket.on('syncUpdateSkillLevel', (data) => {
         if (!currentRoomId) return;
         const room = getOrCreateRoom(currentRoomId);
@@ -246,7 +290,7 @@ io.on('connection', (socket) => {
         }
     });
 
-    // 감독 임명 연동 및 세션 토큰 부여
+    // 권한 감독 임명 및 세션 암호 토큰 발행
     socket.on('syncRegisterDirector', (data) => {
         if (!currentRoomId) return;
         const room = getOrCreateRoom(currentRoomId);
@@ -255,19 +299,19 @@ io.on('connection', (socket) => {
         io.to(currentRoomId).emit('onRegisterDirector', data);
     });
 
-    // 디펜스 미니게임 인터셉트 시작 처리
+    // 디펜스 미니게임 난투 모드 진입 연산
     socket.on('syncStartMiniGame', (data) => {
         if (!currentRoomId) return;
         const room = getOrCreateRoom(currentRoomId);
         room.gameState = "MINIGAME";
-        room.miniGameGauge = 25;
+        room.miniGameGauge = 25; // 중앙 기점 디폴트 밸런스 값
         room.activeDefender = { team: data.defTeam, id: data.defId };
         room.activeAttacker = { team: data.attTeam, id: data.attId };
         
         io.to(currentRoomId).emit('onStartMiniGame', data);
     });
 
-    // 미니게임 실시간 타격/게이지 판정 코어 엔진
+    // 미니게임 연타 게이지 판정 엔진
     socket.on('syncMiniGameHit', (role) => {
         if (!currentRoomId) return;
         const room = getOrCreateRoom(currentRoomId);
@@ -281,9 +325,9 @@ io.on('connection', (socket) => {
 
         io.to(currentRoomId).emit('onMiniGameGauge', room.miniGameGauge);
 
-        // 승패 결정 판정 경합 트리거
+        // 연타 게이지 한계치 도달 시 경합 판정 종료 처리
         if (room.miniGameGauge >= 50) {
-            // 수비 승리 -> 공 소유권 강제 전환
+            // 수비가 이겼을 때: 공 스틸 성공 처리
             room.gameState = "PLAYING";
             room.globalDefenseLockUntil = Date.now() + 5000;
             
@@ -300,7 +344,7 @@ io.on('connection', (socket) => {
                 globalDefenseLockUntil: room.globalDefenseLockUntil 
             });
         } else if (room.miniGameGauge <= 0) {
-            // 공격 돌파 성공 -> 공격권 유지 및 쿨타임 패널티 부여
+            // 공격이 이겼을 때: 돌파 성공 및 가속 유지
             room.gameState = "PLAYING";
             room.globalDefenseLockUntil = Date.now() + 5000;
             
@@ -319,7 +363,7 @@ io.on('connection', (socket) => {
         }
     });
 
-    // 감독 전용 공지 브로드캐스팅 라우터
+    // 감독 라인 전체 공지 텍스트 브로드캐스트
     socket.on('sendDirectorChat', (text) => {
         if (!currentRoomId) return;
         const room = getOrCreateRoom(currentRoomId);
@@ -327,7 +371,7 @@ io.on('connection', (socket) => {
         io.to(currentRoomId).emit('onNewLog', log);
     });
 
-    // 전광판 로그 클리어 모듈
+    // 상황판 실시간 로깅 내역 초기화
     socket.on('syncClearLogs', () => {
         if (!currentRoomId) return;
         const room = getOrCreateRoom(currentRoomId);
@@ -335,13 +379,13 @@ io.on('connection', (socket) => {
         io.to(currentRoomId).emit('onClearLogs');
     });
 
-    // 예외적인 끊김 처리 바인딩 (세션 데이터 보전을 위해 소켓 배열을 실시간으로 파괴하지 않음)
+    // 브라우저 예외 종료 및 리프레시 감지 (안전 세션 유지를 위해 무반응 처리 대기)
     socket.on('disconnect', () => {
-        // 새로고침 방어 아키텍처 적용됨
+        // 새로고침 완충 시스템이 적용되어 있으므로 구조를 유지합니다.
     });
 });
 
-// 경기장 데이터 통합 포트 리스너 활성화
+// 코어 네트워크 포트 리스닝 프로세스 바인딩
 const PORT = 3000;
 server.listen(PORT, () => {
     console.log(`다들 모여 매치 코어 서버 연동 완료: http://localhost:${PORT}`);

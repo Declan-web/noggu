@@ -23,7 +23,7 @@ app.get('/', (req, res) => {
 // 글로벌 경기 구역 인메모리 데이터베이스 (0001, 0002 등)
 const roomsData = {};
 
-// 📌 [고정 상수] 경기장 규격 및 물리 상수 정의
+// [고정 상수] 경기장 규격 및 물리 상수 정의
 const COURT_WIDTH = 1000;
 const COURT_HEIGHT = 500;
 const BALL_MAX_SPEED = 25;
@@ -75,7 +75,7 @@ function addLog(room, type, message) {
     return logEntry;
 }
 
-// 📌 [서버 측 물리 시뮬레이션 루프] 관전자 및 새로고침 유저의 싱크를 강제로 유지하기 위한 보조 업데이트
+// [서버 측 물리 시뮬레이션 루프] 관전자 및 새로고침 유저의 싱크를 강제로 유지하기 위한 보조 업데이트
 setInterval(() => {
     Object.keys(roomsData).forEach(roomId => {
         const room = roomsData[roomId];
@@ -127,7 +127,7 @@ io.on('connection', (socket) => {
 
         const room = getOrCreateRoom(roomId);
 
-        // 📌 [새로고침 구출 아키텍처] 기존 등록 데이터의 소켓 아이디만 실시간으로 교체
+        // [새로고침 구출 아키텍처] 기존 등록 데이터의 소켓 아이디만 실시간으로 교체
         const existingPlayer = room.registeredOwners.find(p => p.ownerName === userName);
         if (existingPlayer) {
             existingPlayer.socketId = socket.id;
@@ -383,6 +383,11 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => {
         // 새로고침 완충 시스템이 적용되어 있으므로 구조를 유지합니다.
     });
+});
+
+// 📌 [오류 방지 완충 장치] 어떤 잘못된 라우터 경로(/undefined 등)로 튕기더라도 index.html로 안전하게 강제 리다이렉트 시킵니다.
+app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 // 코어 네트워크 포트 리스닝 프로세스 바인딩

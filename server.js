@@ -61,9 +61,10 @@ function getOrCreateRoom(roomId) {
             directorName: null,
             directorToken: null,
             globalDefenseLockUntil: 0,
-            miniGameGauge: 25,
+            miniGameGauge: 25, // 0(공격 완승) ~ 50(수비 완승) 기점, 시작점은 25 대칭
             activeDefender: null,
             activeAttacker: null,
+            miniGameTimerId: null, // 5초 카운트다운용 타이머 홀더
             registeredOwners: [],
             logs: [],
             ballState: {
@@ -179,7 +180,6 @@ io.on('connection', (socket) => {
             angle: data.angle
         });
         
-        // 📌 등록/취소 후 최신 전체 방 상태를 전 유저에게 실시간으로 강제 주입합니다.
         io.to(currentRoomId).emit('onInitRoomState', room);
     });
 
@@ -252,9 +252,19 @@ io.on('connection', (socket) => {
         io.to(currentRoomId).emit('onGameStateChange', { state: room.gameState });
     });
 
+    // 📌 [잔상 오류 완전 수정] 경기 리셋 시 방의 모든 메모리 구조와 타이머를 제거하고 클라이언트에 리셋 명령 강제 하향
     socket.on('syncResetMatch', () => {
         if (!currentRoomId) return;
+        
+        const room = roomsData[currentRoomId];
+        if (room && room.miniGameTimerId) {
+            clearTimeout(room.miniGameTimerId);
+        }
+
+        // 완벽하게 데이터를 밀어버려 같은 이름/비번 진입 잔상을 근본적으로 차단합니다.
         delete roomsData[currentRoomId];
+        
+        // 모든 클라이언트 측 브라우저 세션과 데이터 캐시를 하드 포맷하도록 강제 브로드캐스트
         io.to(currentRoomId).emit('onResetMatch');
     });
 
@@ -280,7 +290,6 @@ io.on('connection', (socket) => {
         }
     });
 
-    // 📌 [수정] 감독 등록 시 새로고침 없이 전 유저에게 즉시 반영되도록 소켓 주입 보완
     socket.on('syncRegisterDirector', (data) => {
         if (!currentRoomId) return;
         const room = getOrCreateRoom(currentRoomId);
@@ -288,65 +297,94 @@ io.on('connection', (socket) => {
         room.directorToken = data.token;
         
         io.to(currentRoomId).emit('onRegisterDirector', data);
-        io.to(currentRoomId).emit('onInitRoomState', room); // 즉시 갱신 강제 브로드캐스트
+        io.to(currentRoomId).emit('onInitRoomState', room);
     });
 
+    // 📌 미니게임 개시 (5초 타임어택 결투 시스템 장착 및 골드/퍼플 콘셉트 동기화)
     socket.on('syncStartMiniGame', (data) => {
         if (!currentRoomId) return;
         const room = getOrCreateRoom(currentRoomId);
+        
+        // 혹시 작동 중이던 유령 타이머가 있다면 클리어
+        if (room.miniGameTimerId) clearTimeout(room.miniGameTimerId);
+
         room.gameState = "MINIGAME";
-        room.miniGameGauge = 25;
+        room.miniGameGauge = 25; // 중앙 정렬
         room.activeDefender = { team: data.defTeam, id: data.defId };
         room.activeAttacker = { team: data.attTeam, id: data.attId };
         
-        io.to(currentRoomId).emit('onStartMiniGame', data);
+        // UI 연동용 색상 매칭 정보 주입 (공격=골드황금, 수비=퍼플보라)
+        io.to(currentRoomId).emit('onStartMiniGame', {
+            ...data,
+            attackerColor: '#FFD700', // GOLD
+            defenderColor: '#8A2BE2'  // PURPLE
+        });
+
+        // ⏱️ [5초 자동 만료 시스템 적용] 게이지 끝까지 안 채워도 5초 뒤 강제 판정
+        room.miniGameTimerId = setTimeout(() => {
+            handleMiniGameTimeout(currentRoomId);
+        }, 5000);
     });
 
+    // 미니게임 실시간 난타 스트로크 수신 루프
     socket.on('syncMiniGameHit', (role) => {
         if (!currentRoomId) return;
         const room = getOrCreateRoom(currentRoomId);
         if (room.gameState !== "MINIGAME") return;
 
+        // 보라색 수비(DEFENDER)는 우측(+방향)으로, 황금색 공격(ATTACKER)은 좌측(-방향)으로 게이지를 밀어냅니다.
         if (role === "DEFENDER") {
             room.miniGameGauge += 1;
         } else if (role === "ATTACKER") {
             room.miniGameGauge -= 1;
         }
 
-        io.to(currentRoomId).emit('onMiniGameGauge', room.miniGameGauge);
+        // 게이지 상한선 제한 처리 (0 ~ 50 보정)
+        if (room.miniGameGauge > 50) room.miniGameGauge = 50;
+        if (room.miniGameGauge < 0) room.miniGameGauge = 0;
 
-        if (room.miniGameGauge >= 50) {
-            room.gameState = "PLAYING";
-            room.globalDefenseLockUntil = Date.now() + 5000;
+        io.to(currentRoomId).emit('onMiniGameGauge', room.miniGameGauge);
+    });
+
+    // 📌 [5초 만료 후 승자 판정 비즈니스 로직 연산 엔진]
+    function handleMiniGameTimeout(roomId) {
+        const room = roomsData[roomId];
+        if (!room || room.gameState !== "MINIGAME") return;
+
+        room.gameState = "PLAYING";
+        room.globalDefenseLockUntil = Date.now() + 5000; // 개인기 면역 디폴트 부여
+
+        // 판정 기준: 게이지가 초기값 25보다 크면 보라색 수비(DEFENDER) 승리, 작거나 같으면 황금색 공격(ATTACKER) 승리
+        if (room.miniGameGauge > 25) {
+            // 보라색 수비(DEFENDER) 승리 -> 공 스틸 탈환 성공
             room.ballState.holderTeam = room.activeDefender.team;
             room.ballState.holderId = room.activeDefender.id;
             room.ballState.isFlying = false;
 
-            const log = addLog(room, 'defense', `🛡️ [수비 성공] 수비수가 압박 경합에서 승리하여 공을 탈환했습니다.`);
-            io.to(currentRoomId).emit('onNewLog', log);
-            io.to(currentRoomId).emit('onEndMiniGame', { 
+            const log = addLog(room, 'defense', `🛡️ [시간 만료 판정] 수비진영(보라)의 압박 판정승! 공을 탈환했습니다.`);
+            io.to(roomId).emit('onNewLog', log);
+            io.to(roomId).emit('onEndMiniGame', { 
                 isDefWin: true, 
                 holderTeam: room.activeDefender.team, 
                 holderId: room.activeDefender.id, 
                 globalDefenseLockUntil: room.globalDefenseLockUntil 
             });
-        } else if (room.miniGameGauge <= 0) {
-            room.gameState = "PLAYING";
-            room.globalDefenseLockUntil = Date.now() + 5000;
+        } else {
+            // 황금색 공격(ATTACKER) 승리 -> 가속 돌파 성공 및 소유권 보존
             room.ballState.holderTeam = room.activeAttacker.team;
             room.ballState.holderId = room.activeAttacker.id;
             room.ballState.isFlying = false;
 
-            const log = addLog(room, 'defense', `⚡ [수비 실패] 공격수가 화려한 개인기로 수비를 돌파해 냈습니다.`);
-            io.to(currentRoomId).emit('onNewLog', log);
-            io.to(currentRoomId).emit('onEndMiniGame', { 
+            const log = addLog(room, 'defense', `⚡ [시간 만료 판정] 공격진영(황금)의 돌파 판정승! 돌파에 성공했습니다.`);
+            io.to(roomId).emit('onNewLog', log);
+            io.to(roomId).emit('onEndMiniGame', { 
                 isDefWin: false, 
                 holderTeam: room.activeAttacker.team, 
                 holderId: room.activeAttacker.id, 
                 globalDefenseLockUntil: room.globalDefenseLockUntil 
             });
         }
-    });
+    }
 
     socket.on('sendDirectorChat', (text) => {
         if (!currentRoomId) return;

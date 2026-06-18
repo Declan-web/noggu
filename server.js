@@ -260,7 +260,7 @@ io.on('connection', (socket) => {
 
         room.gameState = "MINIGAME";
         room.miniGameGauge = 25;
-        room.miniGameTimer = 5.0; // 감독 유무 상관없이 무조건 5초 백엔드 가동
+        room.miniGameTimer = 5.0;
         
         room.activeDefender = { team: data.defTeam, id: data.defId };
         room.activeAttacker = { team: data.attTeam, id: data.attId };
@@ -282,7 +282,6 @@ io.on('connection', (socket) => {
 
         if (room.gameState !== "MINIGAME") return;
 
-        // 게이지 방향 정의: 수비가 성공하면 게이지 증가(+), 공격이 수비 뚫으면 게이지 감소(-)
         if (role === "DEFENDER") {
             room.miniGameGauge += 1;
         } else if (role === "ATTACKER") {
@@ -362,7 +361,6 @@ io.on('connection', (socket) => {
     });
 });
 
-// 감독 사이트 브라우징 여부와 관계없이 독자 구동되는 서버 루프 엔진
 setInterval(() => {
     Object.keys(rooms).forEach(roomId => {
         const room = rooms[roomId];

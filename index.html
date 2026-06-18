@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>다들 모여!</title>
+    <title>다들 모여! - 멀티 세션 연동 버전</title>
     <style>
         body {
             margin: 0; background-color: #222; color: #fff;
@@ -152,23 +152,23 @@
 
     <div id="roomEntrance">
         <div class="entrance-box">
-            <h1>차성 체육관</h1>
+            <h1>경기 관리 연동소</h1>
             <div class="input-group">
-                <label for="roomCodeSelect">들리지 않아? 사람들의 함성 소리</label>
+                <label for="roomCodeSelect">경기 구역 지정</label>
                 <select id="roomCodeSelect">
-                    <option value="0001">1 번 코트</option>
-                    <option value="0002">2 번 코트</option>
+                    <option value="0001">0001호 경기 코트</option>
+                    <option value="0002">0002호 경기 코트</option>
                 </select>
             </div>
             <div class="input-group">
-                <label for="roomUserNameInput">선수명</label>
+                <label for="roomUserNameInput">유저 참관명 (본인 실명)</label>
                 <input type="text" id="roomUserNameInput" placeholder="예: 홍길동" style="width:100%;">
             </div>
             <div class="input-group">
                 <label for="roomUserPasswordInput">접속 비밀번호 (숫자 4자리)</label>
                 <input type="password" id="roomUserPasswordInput" maxlength="4" placeholder="••••" style="width:100%;">
             </div>
-            <button onclick="submitRoomAuth(false)">선수 정보를 저장합니다.</button>
+            <button onclick="submitRoomAuth(false)">경기 데이터망 동기화</button>
         </div>
     </div>
 
@@ -330,7 +330,7 @@ const court = {
 
 const onlineScheme = { up: 'w', down: 's', left: 'a', right: 'd', grab: 'e', pass: 'shift', shoot: ' ' };
 
-// 📌 [기능 보완] 새로고침 시 로컬스토리지를 통해 감독 및 수동 선택 플레이어 복구 유도 로직 추가
+// 📌 [기능 추가] 로컬스토리지에 내 제어 정보 실시간 세이브 (새로고침 보존용)
 function saveLocalMatchSession() {
     const sessionData = {
         isReferee: isReferee,
@@ -350,9 +350,9 @@ function loadLocalMatchSession() {
 function submitRoomAuth(isAutoRefresh = false) {
     let rCode, uName, uPass;
     if (isAutoRefresh) {
-        rCode = sessionStorage.getItem("saved_room_id");
-        uName = sessionStorage.getItem("saved_user_name");
-        uPass = sessionStorage.getItem("saved_password");
+        rCode = localStorage.getItem("saved_room_id");
+        uName = localStorage.getItem("saved_user_name");
+        uPass = localStorage.getItem("saved_password");
     } else {
         rCode = document.getElementById("roomCodeSelect").value;
         uName = document.getElementById("roomUserNameInput").value.trim();
@@ -365,17 +365,18 @@ function submitRoomAuth(isAutoRefresh = false) {
 }
 
 window.addEventListener("DOMContentLoaded", () => {
-    const savedRoom = sessionStorage.getItem("saved_room_id");
-    const savedName = sessionStorage.getItem("saved_user_name");
-    const savedPass = sessionStorage.getItem("saved_password");
+    // sessionStorage 대신 새로고침 시에도 소멸되지 않는 localStorage 구조로 전체 전환
+    const savedRoom = localStorage.getItem("saved_room_id");
+    const savedName = localStorage.getItem("saved_user_name");
+    const savedPass = localStorage.getItem("saved_password");
     if (savedRoom && savedName && savedPass) { submitRoomAuth(true); }
 });
 
 socket.on('authResult', (res) => {
-    if(!res.success) { if (res.isAutoRefresh) { sessionStorage.clear(); } else { alert(res.message); } return; }
-    sessionStorage.setItem("saved_room_id", targetRoomId);
-    sessionStorage.setItem("saved_user_name", myProfileName);
-    sessionStorage.setItem("saved_password", myProfilePassword);
+    if(!res.success) { if (res.isAutoRefresh) { localStorage.clear(); } else { alert(res.message); } return; }
+    localStorage.setItem("saved_room_id", targetRoomId);
+    localStorage.setItem("saved_user_name", myProfileName);
+    localStorage.setItem("saved_password", myProfilePassword);
 
     document.getElementById("roomEntrance").style.display = "none";
     document.getElementById("lobby").style.display = "flex";
@@ -528,7 +529,7 @@ function buildActivePlayersPool(preserveNames = true) {
         activePlayers.push(p);
     }
     
-    // 📌 [새로고침 복구] 로컬 스토리지에 백업된 내 제어권 매칭 복구
+    // 📌 [새로고침 위치 및 제어 유지] 스토리지 세션 연동 우선 매칭
     const localSession = loadLocalMatchSession();
     if (localSession && localSession.myControllingPlayerId && localSession.myControllingPlayerTeam) {
         const found = activePlayers.find(p => p.team === localSession.myControllingPlayerTeam && p.id === localSession.myControllingPlayerId);
@@ -581,7 +582,7 @@ function authReferee() {
     if (!inputName) { alert("監督 이름을 입력해 주세요!"); return; }
     if (inputKey === "483010") { 
         isReferee = true; myDirectorName = inputName;
-        saveLocalMatchSession(); // 감독 권한 세션 세이브
+        saveLocalMatchSession(); 
         socket.emit("syncRegisterDirector", { name: inputName, token: "DIR_TOKEN_" + myProfileName }); 
     } 
     else { alert("잘못된 심판 코드입니다!"); }
@@ -614,8 +615,7 @@ function startGame() {
 function triggerManualReset() {
     if (!isReferee) return; resetBtn.blur();
     if(confirm("정말로 전체 경기를 처음 상태로 완전히 초기화하시겠습니까? 모든 세션 데이터가 삭제됩니다.")) { 
-        localStorage.removeItem("saved_match_session"); // 리셋 시에만 명시적으로 삭제
-        sessionStorage.clear(); 
+        localStorage.clear(); // 📌 RESET 버튼을 눌렀을 때만 로컬 스토리지 전체 데이터 파괴 및 초기화
         socket.emit("syncResetMatch"); 
     }
 }
@@ -690,7 +690,7 @@ canvas.addEventListener("mousedown", e => {
                         if (registeredNames.has(myProfileName)) { alert("이미 한 명의 선수를 등록하셨습니다."); return; }
                         p.ownerName = myProfileName; p.socketId = socket.id;
                         myControllingPlayer = p; registeredNames.add(myProfileName);
-                        saveLocalMatchSession(); // 선택한 유저 슬롯 로컬 저장
+                        saveLocalMatchSession(); 
                         socket.emit("syncRegisterOwner", { team: p.team, id: p.id, ownerName: myProfileName, password: myProfilePassword, x: p.x, y: p.y, angle: p.angle });
                         updateAdminDropdown();
                     }
@@ -713,7 +713,7 @@ canvas.addEventListener("touchstart", e => {
                 if (registeredNames.has(myProfileName)) { alert("이미 한 명의 선수를 등록하셨습니다."); return; }
                 p.ownerName = myProfileName; p.socketId = socket.id;
                 myControllingPlayer = p; registeredNames.add(myProfileName);
-                saveLocalMatchSession(); // 선택한 유저 슬롯 모바일 로컬 저장
+                saveLocalMatchSession(); 
                 socket.emit("syncRegisterOwner", { team: p.team, id: p.id, ownerName: myProfileName, password: myProfilePassword, x: p.x, y: p.y, angle: p.angle });
                 updateAdminDropdown();
             }
@@ -871,6 +871,7 @@ socket.on("onInitRoomState", (state) => {
     if (state.globalDefenseLockUntil) { globalDefenseLockUntil = state.globalDefenseLockUntil; }
     buildActivePlayersPool(true);
 
+    // 📌 [새로고침 위치 복구] 서버에 기록된 최신 방 인원 데이터 배치 우선 연동
     if (state.registeredOwners && Array.isArray(state.registeredOwners)) {
         state.registeredOwners.forEach(data => {
             const p = activePlayers.find(o => o.team === data.team && o.id === data.id);
@@ -882,7 +883,7 @@ socket.on("onInitRoomState", (state) => {
         });
     }
 
-    // 📌 [새로고침 연동 복구 핵심] 로컬 스토리지 데이터로 제어권 재매칭
+    // 📌 로컬 스토리지 데이터로 복구 세션 재매칭
     const localSession = loadLocalMatchSession();
     if (localSession) {
         if (localSession.isReferee && localSession.myDirectorName) {
@@ -907,7 +908,6 @@ socket.on("onInitRoomState", (state) => {
             chatInputZone.style.display = "flex"; document.getElementById("teamNameBlueInput").disabled = false; document.getElementById("teamNameRedInput").disabled = false;
         } else { document.getElementById("statusText").innerText = `[관전자 모드] 매치 진행 상황 실시간 관전 중`; }
     } else {
-        // 서버에 감독이 없으면 로컬도 청소
         if (!state.directorName) { isReferee = false; myDirectorName = ""; localStorage.removeItem("saved_match_session"); }
         document.getElementById("refereeZone").style.display = "flex";
         document.getElementById("adminSkillZone").style.display = "none"; chatInputZone.style.display = "none";
@@ -965,13 +965,22 @@ socket.on("onClearLogs", () => { logContainer.innerHTML = ""; });
 socket.on("onStartGame", (data) => { gameState = "PLAYING"; teamBlueName = data.teamBlueName; teamRedName = data.teamRedName; maxBluePlayers = data.maxBluePlayers; maxRedPlayers = data.maxRedPlayers; globalDefenseLockUntil = 0; buildActivePlayersPool(true); toggleUIVisibility(); });
 socket.on("onGameStateChange", (data) => { gameState = data.state; toggleUIVisibility(); });
 socket.on("onResetMatch", () => {
+    // 📌 RESET 발생 시에만 경기 구역지정 화면으로 완벽 탈출 및 데이터 리셋
     gameState = "SETUP"; scoreBlue = 0; scoreRed = 0; document.getElementById("score1").innerText = 0; document.getElementById("score2").innerText = 0;
     myControllingPlayer = null; isReferee = false; myDirectorName = ""; globalDefenseLockUntil = 0; registeredNames.clear();
-    localStorage.removeItem("saved_match_session"); // RESET 버튼 작동 시 완전히 소멸
+    
+    localStorage.clear(); // 로컬 브라우저 저장소 완전 초기화
     buildActivePlayersPool(false); ball.resetBall(); miniGameUI.style.display = "none";
     document.getElementById("refName").value = ""; document.getElementById("refKey").value = "";
     document.getElementById("refereeZone").style.display = "flex"; document.getElementById("adminSkillZone").style.display = "none"; chatInputZone.style.display = "none";
     document.getElementById("teamNameBlueInput").disabled = true; document.getElementById("teamNameRedInput").disabled = true;
+    
+    // 첫 화면 강제 노출 변환
+    document.getElementById("roomEntrance").style.display = "flex";
+    document.getElementById("lobby").style.display = "none";
+    document.getElementById("mainLayout").style.display = "none";
+    document.getElementById("ui").style.display = "none";
+    if (isMobileDevice) { document.getElementById("mobileController").classList.remove("active"); }
     toggleUIVisibility();
 });
 socket.on("onScoreUpdate", (data) => { scoreBlue = data.blue; scoreRed = data.red; document.getElementById("score1").innerText = scoreBlue; document.getElementById("score2").innerText = scoreRed; });

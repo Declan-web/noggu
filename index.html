@@ -801,7 +801,7 @@ function drawCourt() {
     ctx.beginPath(); ctx.arc(court.rightGoal.x, court.rightGoal.y, court.rightGoal.radius, 0, Math.PI * 2); ctx.stroke(); ctx.fillStyle = "#ffea00"; ctx.fill();
 }
 
-// 📌 갱신 및 수정: 모바일 기기 분기와 관계없이 무조건 UI 레이어가 켜지도록 수정 완료
+// 📌 팝업 활성화 수정 완료: 어떤 환경이든 디펜스가 선언되면 miniGameUI 팝업이 무조건 켜지도록 보장합니다.
 function startMiniGameUI(data) {
     gameState = "MINIGAME";
     activeDefender = activePlayers.find(p => p.team === data.defTeam && p.id === data.defId);
@@ -829,7 +829,7 @@ function startMiniGameUI(data) {
     const amIDefender = (myControllingPlayer && myControllingPlayer.team === data.defTeam && myControllingPlayer.id === data.defId);
     const amIAttacker = (myControllingPlayer && myControllingPlayer.team === data.attTeam && myControllingPlayer.id === data.attId);
     
-    // 📌 버그 해결 파트: 기기 환경과 관계없이 miniGameUI 박스 자체는 무조건 활성화('block')시킵니다.
+    // 📌 강제 노출 패치: 모바일 터치 패널 분기와 상관없이 미니게임 창 자체(miniGameUI)는 100% 무조건 block으로 켭니다.
     miniGameUI.style.display = "block";
 
     if ((amIDefender || amIAttacker) && isMobileDevice) {

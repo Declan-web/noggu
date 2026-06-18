@@ -330,7 +330,6 @@ const court = {
 
 const onlineScheme = { up: 'w', down: 's', left: 'a', right: 'd', grab: 'e', pass: 'shift', shoot: ' ' };
 
-// 📌 [기능 추가] 로컬스토리지에 내 제어 정보 실시간 세이브 (새로고침 보존용)
 function saveLocalMatchSession() {
     const sessionData = {
         isReferee: isReferee,
@@ -365,7 +364,6 @@ function submitRoomAuth(isAutoRefresh = false) {
 }
 
 window.addEventListener("DOMContentLoaded", () => {
-    // sessionStorage 대신 새로고침 시에도 소멸되지 않는 localStorage 구조로 전체 전환
     const savedRoom = localStorage.getItem("saved_room_id");
     const savedName = localStorage.getItem("saved_user_name");
     const savedPass = localStorage.getItem("saved_password");
@@ -383,7 +381,6 @@ socket.on('authResult', (res) => {
     document.getElementById("mainLayout").style.display = "flex";
     document.getElementById("ui").style.display = "flex";
     document.getElementById("roomInfoBadge").innerText = `방: ${targetRoomId} [${myProfileName}]`;
-    if (isMobileDevice) { document.getElementById("mobileController").classList.add("active"); document.body.style.paddingBottom = "180px"; }
     canvas.focus();
 });
 
@@ -516,6 +513,7 @@ function buildActivePlayersPool(preserveNames = true) {
     const backupMap = {};
     activePlayers.forEach(p => { if (p.ownerName) { backupMap[`${p.team}_${p.id}`] = { ownerName: p.ownerName, socketId: p.socketId, skillLevel: p.skillLevel, x: p.x, y: p.y, angle: p.angle }; } });
     if (!preserveNames) { registeredNames.clear(); } activePlayers = [];
+    
     for(let i = 0; i < maxBluePlayers; i++) {
         let bPos = allSpawnPositions.BLUE[i]; let p = new Player(bPos.x, bPos.y, "BLUE", i+1, i);
         let bk = backupMap[`BLUE_${i+1}`];
@@ -529,15 +527,11 @@ function buildActivePlayersPool(preserveNames = true) {
         activePlayers.push(p);
     }
     
-    // 📌 [새로고침 위치 및 제어 유지] 스토리지 세션 연동 우선 매칭
-    const localSession = loadLocalMatchSession();
-    if (localSession && localSession.myControllingPlayerId && localSession.myControllingPlayerTeam) {
-        const found = activePlayers.find(p => p.team === localSession.myControllingPlayerTeam && p.id === localSession.myControllingPlayerId);
-        if (found) { myControllingPlayer = found; }
-    } else {
-        const findMySlot = activePlayers.find(p => p.ownerName === myProfileName); 
-        if (findMySlot) { myControllingPlayer = findMySlot; }
-    }
+    // 📌 실명 우선 매칭 권한 복구 지원
+    const currentName = localStorage.getItem("saved_user_name");
+    const findMySlot = activePlayers.find(p => p.ownerName === currentName); 
+    if (findMySlot) { myControllingPlayer = findMySlot; }
+
     updateAdminDropdown();
 }
 
@@ -615,7 +609,7 @@ function startGame() {
 function triggerManualReset() {
     if (!isReferee) return; resetBtn.blur();
     if(confirm("정말로 전체 경기를 처음 상태로 완전히 초기화하시겠습니까? 모든 세션 데이터가 삭제됩니다.")) { 
-        localStorage.clear(); // 📌 RESET 버튼을 눌렀을 때만 로컬 스토리지 전체 데이터 파괴 및 초기화
+        localStorage.clear(); 
         socket.emit("syncResetMatch"); 
     }
 }
@@ -869,40 +863,51 @@ socket.on("onInitRoomState", (state) => {
     document.getElementById("teamLabel1").innerText = teamBlueName; document.getElementById("teamLabel2").innerText = teamRedName;
 
     if (state.globalDefenseLockUntil) { globalDefenseLockUntil = state.globalDefenseLockUntil; }
+    
+    // 1단계: 플레이어 슬롯 껍데기들 기본 생성
     buildActivePlayersPool(true);
 
-    // 📌 [새로고침 위치 복구] 서버에 기록된 최신 방 인원 데이터 배치 우선 연동
+    // 2단계: 📌 [핵심 수정] 새로고침해도 서버의 실시간 좌표(x,y,angle)와 실명을 정확히 매핑하여 강제 주입
     if (state.registeredOwners && Array.isArray(state.registeredOwners)) {
         state.registeredOwners.forEach(data => {
             const p = activePlayers.find(o => o.team === data.team && o.id === data.id);
             if (p) {
-                p.ownerName = data.ownerName; p.socketId = data.socketId; p.skillLevel = data.skillLevel;
-                if (data.x !== undefined) p.x = data.x; if (data.y !== undefined) p.y = data.y; if (data.angle !== undefined) p.angle = data.angle;
-                registeredNames.add(data.ownerName);
+                p.ownerName = data.ownerName;
+                p.socketId = data.socketId;
+                p.skillLevel = data.skillLevel;
+                if (data.x !== undefined) p.x = data.x;
+                if (data.y !== undefined) p.y = data.y;
+                if (data.angle !== undefined) p.angle = data.angle;
+                if (data.ownerName) registeredNames.add(data.ownerName);
             }
         });
     }
 
-    // 📌 로컬 스토리지 데이터로 복구 세션 재매칭
+    // 3단계: 📌 [핵심 수정] 소켓 ID가 아닌 실명(localStorage 값) 기준으로 내 제어권을 되찾음 (방향키/모바일패드 활성화 처리)
+    const currentName = localStorage.getItem("saved_user_name");
+    const targetPlayer = activePlayers.find(p => p.ownerName === currentName);
+    if (targetPlayer) {
+        myControllingPlayer = targetPlayer;
+        saveLocalMatchSession();
+    }
+
+    // 모바일인 경우 모바일 컨트롤러 팝업 여부 즉시 갱신
+    if (isMobileDevice && myControllingPlayer) {
+        document.getElementById("mobileController").classList.add("active");
+        document.body.style.paddingBottom = "180px";
+    }
+
     const localSession = loadLocalMatchSession();
-    if (localSession) {
-        if (localSession.isReferee && localSession.myDirectorName) {
-            isReferee = true; myDirectorName = localSession.myDirectorName;
-            socket.emit("syncRegisterDirector", { name: myDirectorName, token: "DIR_TOKEN_" + myProfileName });
-        }
-        if (localSession.myControllingPlayerId && localSession.myControllingPlayerTeam) {
-            const targetPlayer = activePlayers.find(p => p.team === localSession.myControllingPlayerTeam && p.id === localSession.myControllingPlayerId);
-            if (targetPlayer) { myControllingPlayer = targetPlayer; }
-        }
-    } else {
-        const findMySlot = activePlayers.find(p => p.ownerName === myProfileName); if (findMySlot) { myControllingPlayer = findMySlot; }
+    if (localSession && localSession.isReferee && localSession.myDirectorName) {
+        isReferee = true; myDirectorName = localSession.myDirectorName;
+        socket.emit("syncRegisterDirector", { name: myDirectorName, token: "DIR_TOKEN_" + currentName });
     }
 
     updateAdminDropdown();
     logContainer.innerHTML = ""; if (state.logs) state.logs.forEach(log => appendLogToUI(log));
 
     if (state.directorName) {
-        if (isReferee || state.directorToken === "DIR_TOKEN_" + myProfileName) {
+        if (isReferee || state.directorToken === "DIR_TOKEN_" + currentName) {
             isReferee = true; myDirectorName = state.directorName;
             document.getElementById("adminSkillZone").style.display = "flex"; document.getElementById("refereeZone").style.display = "none";
             chatInputZone.style.display = "flex"; document.getElementById("teamNameBlueInput").disabled = false; document.getElementById("teamNameRedInput").disabled = false;
@@ -937,7 +942,14 @@ socket.on("onRegisterOwner", (data) => {
     if (p) {
         if (p.ownerName) registeredNames.delete(p.ownerName);
         if (data.ownerName === "") { p.ownerName = null; p.socketId = null; p.skillLevel = 5.0; } 
-        else { p.ownerName = data.ownerName; p.socketId = data.socketId || null; registeredNames.add(data.ownerName); if (data.ownerName === myProfileName) { myControllingPlayer = p; saveLocalMatchSession(); } }
+        else { 
+            p.ownerName = data.ownerName; p.socketId = data.socketId || null; registeredNames.add(data.ownerName); 
+            if (data.ownerName === myProfileName) { 
+                myControllingPlayer = p; 
+                saveLocalMatchSession(); 
+                if (isMobileDevice) { document.getElementById("mobileController").classList.add("active"); document.body.style.paddingBottom = "180px"; }
+            } 
+        }
     }
     updateAdminDropdown();
 });
@@ -965,22 +977,20 @@ socket.on("onClearLogs", () => { logContainer.innerHTML = ""; });
 socket.on("onStartGame", (data) => { gameState = "PLAYING"; teamBlueName = data.teamBlueName; teamRedName = data.teamRedName; maxBluePlayers = data.maxBluePlayers; maxRedPlayers = data.maxRedPlayers; globalDefenseLockUntil = 0; buildActivePlayersPool(true); toggleUIVisibility(); });
 socket.on("onGameStateChange", (data) => { gameState = data.state; toggleUIVisibility(); });
 socket.on("onResetMatch", () => {
-    // 📌 RESET 발생 시에만 경기 구역지정 화면으로 완벽 탈출 및 데이터 리셋
     gameState = "SETUP"; scoreBlue = 0; scoreRed = 0; document.getElementById("score1").innerText = 0; document.getElementById("score2").innerText = 0;
     myControllingPlayer = null; isReferee = false; myDirectorName = ""; globalDefenseLockUntil = 0; registeredNames.clear();
     
-    localStorage.clear(); // 로컬 브라우저 저장소 완전 초기화
+    localStorage.clear(); 
     buildActivePlayersPool(false); ball.resetBall(); miniGameUI.style.display = "none";
     document.getElementById("refName").value = ""; document.getElementById("refKey").value = "";
     document.getElementById("refereeZone").style.display = "flex"; document.getElementById("adminSkillZone").style.display = "none"; chatInputZone.style.display = "none";
     document.getElementById("teamNameBlueInput").disabled = true; document.getElementById("teamNameRedInput").disabled = true;
     
-    // 첫 화면 강제 노출 변환
     document.getElementById("roomEntrance").style.display = "flex";
     document.getElementById("lobby").style.display = "none";
     document.getElementById("mainLayout").style.display = "none";
     document.getElementById("ui").style.display = "none";
-    if (isMobileDevice) { document.getElementById("mobileController").classList.remove("active"); }
+    if (isMobileDevice) { document.getElementById("mobileController").classList.remove("active"); document.body.style.paddingBottom = "20px"; }
     toggleUIVisibility();
 });
 socket.on("onScoreUpdate", (data) => { scoreBlue = data.blue; scoreRed = data.red; document.getElementById("score1").innerText = scoreBlue; document.getElementById("score2").innerText = scoreRed; });

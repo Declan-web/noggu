@@ -186,7 +186,7 @@ io.on('connection', (socket) => {
         room.maxRedPlayers = data.maxRedPlayers;
         room.globalDefenseLockUntil = 0;
 
-        const logEntry = addLogToRoom(room, "시작 신호가 울렸습니다! 경기를 시작합니다.", "chat");
+        const logEntry = addLogToRoom(room, "경기가 시작되었습니다. 다들 뛰어!", "chat");
 
         io.to(currentRoomId).emit('onStartGame', data);
         if (logEntry) io.to(currentRoomId).emit('onNewLog', logEntry);
@@ -231,7 +231,7 @@ io.on('connection', (socket) => {
         room.scoreRed = data.red;
 
         const scoringTeamName = data.scoringTeam === "BLUE" ? room.teamBlueName : room.teamRedName;
-        const logEntry = addLogToRoom(room, `🎉 슛 성공! [${scoringTeamName}]팀이 2점을 획득했습니다.`, "score");
+        const logEntry = addLogToRoom(room, `[${scoringTeamName}]팀이 2점을 획득했습니다.`, "score");
 
         io.to(currentRoomId).emit('onScoreUpdate', { blue: room.scoreBlue, red: room.scoreRed });
         if (logEntry) io.to(currentRoomId).emit('onNewLog', logEntry);
@@ -270,7 +270,7 @@ io.on('connection', (socket) => {
         const defName = defUser ? defUser.ownerName : `선수 ${data.defId}`;
         const attName = attUser ? attUser.ownerName : `선수 ${data.attId}`;
 
-        const logEntry = addLogToRoom(room, `🔥 [${defName}] 대 [${attName}] 디펜스 경합 경기가 선언되었습니다! (5초간 연타)`, "defense");
+        const logEntry = addLogToRoom(room, `🔥 마우스 우클릭 혹은 화면을 연타하세요! 🔥`, "defense");
 
         io.to(currentRoomId).emit('onStartMiniGame', data);
         if (logEntry) io.to(currentRoomId).emit('onNewLog', logEntry);
@@ -308,9 +308,9 @@ io.on('connection', (socket) => {
 
         let message = "";
         if (data.isDefWin) {
-            message = `🛡 수비 성공! [${defName}] 선수가 공을 빼앗아 가로챘습니다. (수비 득표: ${data.defGauge} vs 공격 득표: ${data.attGauge})`;
+            message = `수비 성공! [${defName}] 선수가 공의 소유권을 빼앗아 옵니다.`;
         } else {
-            message = `⚡ 수비 실패! [${attName}] 선수가 철벽 방어를 뚫고 드라이브를 유지합니다. (수비 득표: ${data.defGauge} vs 공격 득표: ${data.attGauge})`;
+            message = `수비 실패! [${attName}] 선수가 공의 소유권을 유지합니다.`;
         }
 
         const logEntry = addLogToRoom(room, message, "defense");
@@ -389,11 +389,11 @@ setInterval(() => {
                 let holderTeam = null;
 
                 if (isDefWin) {
-                    message = `🛡 수비 성공! [${defName}] 선수가 공을 빼앗아 가로챘습니다. (수비 득표: ${defGauge} vs 공격 득표: ${attGauge})`;
+                    message = `수비 성공! [${defName}] 선수가 공의 소유권을 빼앗아 옵니다.`;
                     holderId = room.activeDefender.id;
                     holderTeam = room.activeDefender.team;
                 } else {
-                    message = `⚡ 수비 실패! [${attName}] 선수가 철벽 방어를 뚫고 드라이브를 유지합니다. (수비 득표: ${defGauge} vs 공격 득표: ${attGauge})`;
+                    message = `수비 실패! [${attName}] 선수가 공의 소유권을 유지합니다.`;
                     holderId = room.activeAttacker.id;
                     holderTeam = room.activeAttacker.team;
                 }

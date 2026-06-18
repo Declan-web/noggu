@@ -93,7 +93,6 @@
         }
         #cutIn.active { transform: translate(-50%, -50%) scale(1); }
         
-        /* 📌 디펜스 게임 팝업 창 스타일 고정 (image_fc19e5.png 기반 복구) */
         #miniGameUI {
             position: absolute; top: 30px; left: 50%; transform: translateX(-50%);
             background: #110f0c; padding: 18px 25px; border-radius: 16px;
@@ -227,7 +226,6 @@
         <div id="gameContainer">
             <div id="cutIn">디펜스!!</div>
             
-            <!-- 📌 image_fc19e5.png 팝업 디자인 명세 100% 매칭 구조 정의 -->
             <div id="miniGameUI">
                 <div id="miniGameTitle" style="font-weight:bold; font-size:16px; color:#ffffff; letter-spacing: 0.5px;">🔥 디펜스 게임 🔥</div>
                 <div class="progress-container">
@@ -284,7 +282,6 @@ const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 const cutIn = document.getElementById("cutIn");
 
-// 📌 중복 탐색 제거 및 변수 참조 오류 원천 차단 개조 완료
 const miniGameUI = document.getElementById("miniGameUI");
 const progressFiller = document.getElementById("progressFiller");
 
@@ -332,6 +329,23 @@ const court = {
 };
 
 const onlineScheme = { up: 'w', down: 's', left: 'a', right: 'd', grab: 'e', pass: 'shift', shoot: ' ' };
+
+// 📌 [기능 보완] 새로고침 시 로컬스토리지를 통해 감독 및 수동 선택 플레이어 복구 유도 로직 추가
+function saveLocalMatchSession() {
+    const sessionData = {
+        isReferee: isReferee,
+        myDirectorName: myDirectorName,
+        myControllingPlayerId: myControllingPlayer ? myControllingPlayer.id : null,
+        myControllingPlayerTeam: myControllingPlayer ? myControllingPlayer.team : null
+    };
+    localStorage.setItem("saved_match_session", JSON.stringify(sessionData));
+}
+
+function loadLocalMatchSession() {
+    const raw = localStorage.getItem("saved_match_session");
+    if (!raw) return null;
+    try { return JSON.parse(raw); } catch(e) { return null; }
+}
 
 function submitRoomAuth(isAutoRefresh = false) {
     let rCode, uName, uPass;
@@ -513,7 +527,16 @@ function buildActivePlayersPool(preserveNames = true) {
         if (bk && preserveNames) { p.ownerName = bk.ownerName; p.socketId = bk.socketId; p.skillLevel = bk.skillLevel; p.x = bk.x; p.y = bk.y; p.angle = bk.angle; registeredNames.add(bk.ownerName); }
         activePlayers.push(p);
     }
-    const findMySlot = activePlayers.find(p => p.ownerName === myProfileName); if (findMySlot) { myControllingPlayer = findMySlot; }
+    
+    // 📌 [새로고침 복구] 로컬 스토리지에 백업된 내 제어권 매칭 복구
+    const localSession = loadLocalMatchSession();
+    if (localSession && localSession.myControllingPlayerId && localSession.myControllingPlayerTeam) {
+        const found = activePlayers.find(p => p.team === localSession.myControllingPlayerTeam && p.id === localSession.myControllingPlayerId);
+        if (found) { myControllingPlayer = found; }
+    } else {
+        const findMySlot = activePlayers.find(p => p.ownerName === myProfileName); 
+        if (findMySlot) { myControllingPlayer = findMySlot; }
+    }
     updateAdminDropdown();
 }
 
@@ -556,7 +579,11 @@ function updatePlayerSkill() {
 function authReferee() {
     const inputName = document.getElementById("refName").value.trim(); const inputKey = document.getElementById("refKey").value;
     if (!inputName) { alert("監督 이름을 입력해 주세요!"); return; }
-    if (inputKey === "483010") { socket.emit("syncRegisterDirector", { name: inputName, token: "DIR_TOKEN_" + myProfileName }); } 
+    if (inputKey === "483010") { 
+        isReferee = true; myDirectorName = inputName;
+        saveLocalMatchSession(); // 감독 권한 세션 세이브
+        socket.emit("syncRegisterDirector", { name: inputName, token: "DIR_TOKEN_" + myProfileName }); 
+    } 
     else { alert("잘못된 심판 코드입니다!"); }
 }
 
@@ -586,7 +613,11 @@ function startGame() {
 
 function triggerManualReset() {
     if (!isReferee) return; resetBtn.blur();
-    if(confirm("정말로 전체 경기를 처음 상태로 완전히 초기화하시겠습니까?")) { sessionStorage.clear(); socket.emit("syncResetMatch"); }
+    if(confirm("정말로 전체 경기를 처음 상태로 완전히 초기화하시겠습니까? 모든 세션 데이터가 삭제됩니다.")) { 
+        localStorage.removeItem("saved_match_session"); // 리셋 시에만 명시적으로 삭제
+        sessionStorage.clear(); 
+        socket.emit("syncResetMatch"); 
+    }
 }
 
 function togglePause() { if (!isReferee) return; if (gameState === "SETUP") return; pauseBtn.blur(); socket.emit("syncTogglePause"); }
@@ -614,11 +645,8 @@ function sendDirectorChat() {
 
 function appendLogToUI(log) {
     if (!log || !log.message) return;
-    
     const filterPattern = /\[[^\]]*監督[^\]]*\]|監督|경기력/;
-    if (filterPattern.test(log.message)) {
-        return;
-    }
+    if (filterPattern.test(log.message)) return;
 
     const logItem = document.createElement("div"); logItem.className = `log-item log-type-${log.type}`;
     const timeSpan = document.createElement("span"); timeSpan.className = "log-time"; timeSpan.innerText = `[${log.timestamp}]`;
@@ -630,7 +658,6 @@ function appendLogToUI(log) {
 function processMiniGameTap() {
     if (gameState !== "MINIGAME" || !myControllingPlayer) return;
     const p = myControllingPlayer;
-    
     if (activeDefender && p.team === activeDefender.team && p.id === activeDefender.id) {
         socket.emit("syncMiniGameHit", "DEFENDER");
     } 
@@ -644,12 +671,7 @@ miniTapButton.addEventListener("click", e => { e.preventDefault(); e.stopPropaga
 
 canvas.addEventListener("mousedown", e => {
     canvas.focus();
-    
-    if (gameState === "MINIGAME") {
-        e.preventDefault();
-        processMiniGameTap();
-        return;
-    }
+    if (gameState === "MINIGAME") { e.preventDefault(); processMiniGameTap(); return; }
     
     if (e.button === 0) { 
         const rect = canvas.getBoundingClientRect();
@@ -668,6 +690,7 @@ canvas.addEventListener("mousedown", e => {
                         if (registeredNames.has(myProfileName)) { alert("이미 한 명의 선수를 등록하셨습니다."); return; }
                         p.ownerName = myProfileName; p.socketId = socket.id;
                         myControllingPlayer = p; registeredNames.add(myProfileName);
+                        saveLocalMatchSession(); // 선택한 유저 슬롯 로컬 저장
                         socket.emit("syncRegisterOwner", { team: p.team, id: p.id, ownerName: myProfileName, password: myProfilePassword, x: p.x, y: p.y, angle: p.angle });
                         updateAdminDropdown();
                     }
@@ -690,6 +713,7 @@ canvas.addEventListener("touchstart", e => {
                 if (registeredNames.has(myProfileName)) { alert("이미 한 명의 선수를 등록하셨습니다."); return; }
                 p.ownerName = myProfileName; p.socketId = socket.id;
                 myControllingPlayer = p; registeredNames.add(myProfileName);
+                saveLocalMatchSession(); // 선택한 유저 슬롯 모바일 로컬 저장
                 socket.emit("syncRegisterOwner", { team: p.team, id: p.id, ownerName: myProfileName, password: myProfilePassword, x: p.x, y: p.y, angle: p.angle });
                 updateAdminDropdown();
             }
@@ -759,15 +783,7 @@ const resetJoystick = () => { joystickActive = false; mobileMoveX = 0; mobileMov
 vJoystickContainer.addEventListener("touchend", resetJoystick); vJoystickContainer.addEventListener("touchcancel", resetJoystick);
 
 document.getElementById("vBtnGrab").addEventListener("touchstart", e => { e.preventDefault(); if (gameState === "PLAYING" && myControllingPlayer) checkManualBallGrab(myControllingPlayer); });
-
-document.getElementById("vBtnDef").addEventListener("touchstart", e => { 
-    e.preventDefault(); 
-    e.stopPropagation(); 
-    if (gameState === "PLAYING" && myControllingPlayer) {
-        checkDefenseTrigger(myControllingPlayer); 
-    } 
-});
-
+document.getElementById("vBtnDef").addEventListener("touchstart", e => { e.preventDefault(); e.stopPropagation(); if (gameState === "PLAYING" && myControllingPlayer) checkDefenseTrigger(myControllingPlayer); });
 document.getElementById("vBtnPass").addEventListener("touchstart", e => { e.preventDefault(); if (gameState === "PLAYING" && myControllingPlayer && ball.holder && ball.holder.team === myControllingPlayer.team && ball.holder.id === myControllingPlayer.id) { passAction(myControllingPlayer); } });
 document.getElementById("vBtnShoot").addEventListener("touchstart", e => { e.preventDefault(); if (gameState === "PLAYING" && myControllingPlayer && ball.holder && ball.holder.team === myControllingPlayer.team && ball.holder.id === myControllingPlayer.id) { shootAction(myControllingPlayer); } });
 
@@ -809,7 +825,6 @@ function drawCourt() {
     ctx.beginPath(); ctx.arc(court.rightGoal.x, court.rightGoal.y, court.rightGoal.radius, 0, Math.PI * 2); ctx.stroke(); ctx.fillStyle = "#ffea00"; ctx.fill();
 }
 
-// 📌 팝업 활성화 구문 원천 차단 오류 전면 수정 패치 완료
 function startMiniGameUI(data) {
     gameState = "MINIGAME";
     activeDefender = activePlayers.find(p => p.team === data.defTeam && p.id === data.defId);
@@ -817,33 +832,22 @@ function startMiniGameUI(data) {
     
     const defName = activeDefender?.ownerName || "수비수";
     const attName = activeAttacker?.ownerName || "공격수";
-
-    // 📌 image_fc19e5.png 기반 스트링 매칭 포맷 고정
     document.getElementById("miniGameVS").innerText = `[수비] ${defName} VS [공격] ${attName}`;
     
     const amIDefender = (myControllingPlayer && myControllingPlayer.team === data.defTeam && myControllingPlayer.id === data.defId);
     const amIAttacker = (myControllingPlayer && myControllingPlayer.team === data.attTeam && myControllingPlayer.id === data.attId);
     
-    // 이제 정상 작동하여 강제 렌더링 블록 처리 진행
     miniGameUI.style.display = "block";
-
     if ((amIDefender || amIAttacker) && isMobileDevice) {
-        miniGameClickZone.style.display = "block";
-        miniTapButton.innerText = "PUSH!!";
-    } else {
-        miniGameClickZone.style.display = "none";
-    }
+        miniGameClickZone.style.display = "block"; miniTapButton.innerText = "PUSH!!";
+    } else { miniGameClickZone.style.display = "none"; }
 
     updateGaugeDisplay(miniGameGauge);
-    cutIn.innerText = "디펜스!!"; 
-    cutIn.classList.add("active"); setTimeout(() => { cutIn.classList.remove("active"); }, 900);
+    cutIn.innerText = "디펜스!!"; cutIn.classList.add("active"); setTimeout(() => { cutIn.classList.remove("active"); }, 900);
 }
 
-// 📌 image_fc19e5.png 구조와 100% 동일한 수비:XX / 공격:XX 실시간 갱신 처리 완료
 function updateGaugeDisplay(gaugeValue) {
-    const pct = (gaugeValue / 50) * 100;
-    progressFiller.style.width = `${pct}%`;
-    
+    const pct = (gaugeValue / 50) * 100; progressFiller.style.width = `${pct}%`;
     document.getElementById("leftTeamGaugeValue").innerText = `수비: ${gaugeValue}`;
     document.getElementById("rightTeamGaugeValue").innerText = `공격: ${50 - gaugeValue}`;
 }
@@ -852,8 +856,7 @@ function endMiniGame(resultData) {
     gameState = "PLAYING"; miniGameUI.style.display = "none"; miniGameClickZone.style.display = "none";
     if (resultData.holderId) { ball.holder = activePlayers.find(p => p.team === resultData.holderTeam && p.id === resultData.holderId); } else { ball.holder = null; }
     if (resultData.globalDefenseLockUntil) { globalDefenseLockUntil = resultData.globalDefenseLockUntil; }
-    cutIn.innerText = resultData.isDefWin ? "수비 성공!" : "수비 실패!"; 
-    cutIn.classList.add("active"); setTimeout(() => { cutIn.classList.remove("active"); }, 1100);
+    cutIn.innerText = resultData.isDefWin ? "수비 성공!" : "수비 실패!"; cutIn.classList.add("active"); setTimeout(() => { cutIn.classList.remove("active"); }, 1100);
 }
 
 socket.on("onInitRoomState", (state) => {
@@ -879,19 +882,34 @@ socket.on("onInitRoomState", (state) => {
         });
     }
 
-    const findMySlot = activePlayers.find(p => p.ownerName === myProfileName); if (findMySlot) { myControllingPlayer = findMySlot; }
+    // 📌 [새로고침 연동 복구 핵심] 로컬 스토리지 데이터로 제어권 재매칭
+    const localSession = loadLocalMatchSession();
+    if (localSession) {
+        if (localSession.isReferee && localSession.myDirectorName) {
+            isReferee = true; myDirectorName = localSession.myDirectorName;
+            socket.emit("syncRegisterDirector", { name: myDirectorName, token: "DIR_TOKEN_" + myProfileName });
+        }
+        if (localSession.myControllingPlayerId && localSession.myControllingPlayerTeam) {
+            const targetPlayer = activePlayers.find(p => p.team === localSession.myControllingPlayerTeam && p.id === localSession.myControllingPlayerId);
+            if (targetPlayer) { myControllingPlayer = targetPlayer; }
+        }
+    } else {
+        const findMySlot = activePlayers.find(p => p.ownerName === myProfileName); if (findMySlot) { myControllingPlayer = findMySlot; }
+    }
+
     updateAdminDropdown();
     logContainer.innerHTML = ""; if (state.logs) state.logs.forEach(log => appendLogToUI(log));
 
     if (state.directorName) {
-        if (state.directorToken === "DIR_TOKEN_" + myProfileName) {
+        if (isReferee || state.directorToken === "DIR_TOKEN_" + myProfileName) {
             isReferee = true; myDirectorName = state.directorName;
             document.getElementById("adminSkillZone").style.display = "flex"; document.getElementById("refereeZone").style.display = "none";
             chatInputZone.style.display = "flex"; document.getElementById("teamNameBlueInput").disabled = false; document.getElementById("teamNameRedInput").disabled = false;
-            socket.emit("syncRegisterDirector", { name: myDirectorName, token: "DIR_TOKEN_" + myProfileName });
         } else { document.getElementById("statusText").innerText = `[관전자 모드] 매치 진행 상황 실시간 관전 중`; }
     } else {
-        isReferee = false; myDirectorName = ""; document.getElementById("refereeZone").style.display = "flex";
+        // 서버에 감독이 없으면 로컬도 청소
+        if (!state.directorName) { isReferee = false; myDirectorName = ""; localStorage.removeItem("saved_match_session"); }
+        document.getElementById("refereeZone").style.display = "flex";
         document.getElementById("adminSkillZone").style.display = "none"; chatInputZone.style.display = "none";
     }
     
@@ -905,7 +923,10 @@ socket.on("onInitRoomState", (state) => {
     if(!loopStarted) { lastTime = performance.now(); gameLoop(lastTime); loopStarted = true; }
 });
 
-socket.on("onPlayerMove", (data) => { const p = activePlayers.find(o => o.team === data.team && o.id === data.id); if (p) { p.x = data.x; p.y = data.y; p.angle = data.angle; } });
+socket.on("onPlayerMove", (data) => { 
+    const p = activePlayers.find(o => o.team === data.team && o.id === data.id); 
+    if (p) { p.x = data.x; p.y = data.y; p.angle = data.angle; } 
+});
 socket.on("onBallAction", (data) => {
     ball.x = data.x; ball.y = data.y; ball.vx = data.vx; ball.vy = data.vy; ball.isFlying = data.isFlying; ball.lastShooterSkill = data.lastShooterSkill || 5.0;
     if (data.holderId) { ball.holder = activePlayers.find(p => p.team === data.holderTeam && p.id === data.holderId); } else { ball.holder = null; }
@@ -916,7 +937,7 @@ socket.on("onRegisterOwner", (data) => {
     if (p) {
         if (p.ownerName) registeredNames.delete(p.ownerName);
         if (data.ownerName === "") { p.ownerName = null; p.socketId = null; p.skillLevel = 5.0; } 
-        else { p.ownerName = data.ownerName; p.socketId = data.socketId || null; registeredNames.add(data.ownerName); if (data.ownerName === myProfileName) { myControllingPlayer = p; } }
+        else { p.ownerName = data.ownerName; p.socketId = data.socketId || null; registeredNames.add(data.ownerName); if (data.ownerName === myProfileName) { myControllingPlayer = p; saveLocalMatchSession(); } }
     }
     updateAdminDropdown();
 });
@@ -927,13 +948,14 @@ socket.on("onLiveTeamName", (data) => {
 });
 socket.on("onRegisterDirector", (data) => {
     if (!data.directorName) {
-        isReferee = false; myDirectorName = ""; document.getElementById("refereeZone").style.display = "flex";
+        isReferee = false; myDirectorName = ""; localStorage.removeItem("saved_match_session");
+        document.getElementById("refereeZone").style.display = "flex";
         document.getElementById("adminSkillZone").style.display = "none"; chatInputZone.style.display = "none";
         document.getElementById("teamNameBlueInput").disabled = true; document.getElementById("teamNameRedInput").disabled = true;
         toggleUIVisibility(); return;
     }
     if (data.directorToken === "DIR_TOKEN_" + myProfileName) {
-        isReferee = true; myDirectorName = data.directorName;
+        isReferee = true; myDirectorName = data.directorName; saveLocalMatchSession();
         document.getElementById("adminSkillZone").style.display = "flex"; document.getElementById("refereeZone").style.display = "none"; chatInputZone.style.display = "flex";
         document.getElementById("teamNameBlueInput").disabled = false; document.getElementById("teamNameRedInput").disabled = false;
     } else { document.getElementById("statusText").innerText = `[관전자 모드] 매치 진행 상황 실시간 관전 중`; }
@@ -945,6 +967,7 @@ socket.on("onGameStateChange", (data) => { gameState = data.state; toggleUIVisib
 socket.on("onResetMatch", () => {
     gameState = "SETUP"; scoreBlue = 0; scoreRed = 0; document.getElementById("score1").innerText = 0; document.getElementById("score2").innerText = 0;
     myControllingPlayer = null; isReferee = false; myDirectorName = ""; globalDefenseLockUntil = 0; registeredNames.clear();
+    localStorage.removeItem("saved_match_session"); // RESET 버튼 작동 시 완전히 소멸
     buildActivePlayersPool(false); ball.resetBall(); miniGameUI.style.display = "none";
     document.getElementById("refName").value = ""; document.getElementById("refKey").value = "";
     document.getElementById("refereeZone").style.display = "flex"; document.getElementById("adminSkillZone").style.display = "none"; chatInputZone.style.display = "none";

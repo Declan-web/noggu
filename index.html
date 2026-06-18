@@ -303,7 +303,7 @@ let teamBlueName = "TEAM BLUE"; let teamRedName = "TEAM RED";
 let maxBluePlayers = 5; let maxRedPlayers = 5;
 
 let gameState = "SETUP"; 
-let miniGameGauge = 25; let miniGameTimer = 0;
+let miniGameGauge = 25;
 let activeDefender = null; let activeAttacker = null;
 let globalDefenseLockUntil = 0; 
 
@@ -604,12 +604,11 @@ function sendDirectorChat() {
     if(!text.trim()) return; socket.emit('sendDirectorChat', text); input.value = ""; canvas.focus();
 }
 
-// 📌 LOG 필터링: 감독 부임, 경기력 변화 등 '감독' 관련 시스템 알림을 원천 제거
 function appendLogToUI(log) {
     if (!log || !log.message) return;
     
-    // '감독' 단어나 경기력 변경 문구가 감지되면 기록을 아예 무시함
-    if (log.message.includes("감독") || log.message.includes("경기력")) {
+    const filterPattern = /\[[^\]]*감독[^\]]*\]|감독|경기력/;
+    if (filterPattern.test(log.message)) {
         return;
     }
 
@@ -620,7 +619,6 @@ function appendLogToUI(log) {
     logContainer.scrollTop = logContainer.scrollHeight;
 }
 
-// 📌 브라우저 우클릭 메뉴 팝업 차단 (PC 우클릭 연타용 핵심 기초 환경)
 document.addEventListener("contextmenu", e => { e.preventDefault(); });
 canvas.addEventListener("contextmenu", e => { e.preventDefault(); });
 document.getElementById("gameContainer").addEventListener("contextmenu", e => { e.preventDefault(); });
@@ -643,10 +641,11 @@ miniTapButton.addEventListener("click", e => { e.preventDefault(); e.stopPropaga
 canvas.addEventListener("mousedown", e => {
     canvas.focus();
     
-    // 🖱 [PC 전용 우클릭 연타] 미니게임 도중 우클릭 입력 시 연타 신호 처리
     if (gameState === "MINIGAME") {
         e.preventDefault();
-        if (e.button === 2) { processMiniGameTap(); }
+        if (e.button === 2) { 
+            processMiniGameTap(); 
+        }
         return;
     }
     
@@ -701,7 +700,6 @@ window.addEventListener("keydown", e => {
     const key = e.key.toLowerCase(); keys[key] = true;
     if (e.key === " " || e.key === "Enter" || e.key.toLowerCase() === "shift") { e.preventDefault(); }
     
-    // 미니게임 키보드 연타 분기 유지
     if (gameState === "MINIGAME") { if(key === 'e' || e.key === " ") { processMiniGameTap(); } return; }
     if (gameState === "PAUSE") return;
 
@@ -731,7 +729,7 @@ function checkDefenseTrigger(player) {
     const target = ball.holder; const dist = Math.hypot(player.x - target.x, player.y - target.y);
     
     if (dist < player.radius + target.radius + 13) {
-        activeDefender = player; activeAttacker = target; miniGameGauge = 25; miniGameTimer = 5.0; gameState = "MINIGAME";
+        activeDefender = player; activeAttacker = target; miniGameGauge = 25; gameState = "MINIGAME";
         socket.emit("syncStartMiniGame", { defTeam: player.team, defId: player.id, attTeam: target.team, attId: target.id });
     }
 }
@@ -760,7 +758,6 @@ vJoystickContainer.addEventListener("touchend", resetJoystick); vJoystickContain
 
 document.getElementById("vBtnGrab").addEventListener("touchstart", e => { e.preventDefault(); if (gameState === "PLAYING" && myControllingPlayer) checkManualBallGrab(myControllingPlayer); });
 
-// 📱 [모바일 DEF 즉시 튕김 버그 수정] 이벤트 래핑 버블링 차단 및 다중 감지 완전 분할
 document.getElementById("vBtnDef").addEventListener("touchstart", e => { 
     e.preventDefault(); 
     e.stopPropagation(); 
@@ -795,27 +792,7 @@ function gameLoop(currentTime) {
         }
         ball.update(dt);
     }
-    else if (gameState === "MINIGAME") {
-        if (isReferee) {
-            miniGameTimer -= dt;
-            if (miniGameTimer <= 0) {
-                const defGauge = miniGameGauge;
-                const attGauge = 50 - miniGameGauge;
-                let isDefWin = defGauge > attGauge;
-                
-                if (defGauge === attGauge) { isDefWin = Math.random() < 0.5; } 
-
-                gameState = "PLAYING";
-                if (isDefWin) {
-                    ball.holder = activeDefender;
-                    socket.emit("syncEndMiniGame", { isDefWin: true, defTeam: activeDefender.team, defId: activeDefender.id, holderTeam: activeDefender.team, holderId: activeDefender.id, defGauge: defGauge, attGauge: attGauge });
-                } else {
-                    ball.holder = activeAttacker;
-                    socket.emit("syncEndMiniGame", { isDefWin: false, attTeam: activeAttacker.team, attId: activeAttacker.id, holderTeam: activeAttacker.team, holderId: activeAttacker.id, defGauge: defGauge, attGauge: attGauge });
-                }
-            }
-        }
-    }
+    // 📌 핵심 수정: 클라이언트 사이드 gameLoop 내 독립 검사 분기를 제거하고 오직 서버 동기화에만 타이머 흐름을 위임하도록 변경 (감독 유무 제한 완벽 파괴)
     ctx.clearRect(0, 0, canvas.width, canvas.height); drawCourt(); activePlayers.forEach(p => p.draw()); ball.draw();
     requestAnimationFrame(gameLoop);
 }
@@ -843,7 +820,6 @@ function startMiniGameUI(data) {
     const amIDefender = (myControllingPlayer && myControllingPlayer.team === data.defTeam && myControllingPlayer.id === data.defId);
     const amIAttacker = (myControllingPlayer && myControllingPlayer.team === data.attTeam && myControllingPlayer.id === data.attId);
     
-    // 📱 PC/모바일 환경 판별에 따라 PUSH 버튼 노출 여부 결정
     if ((amIDefender || amIAttacker) && isMobileDevice) {
         miniGameClickZone.style.display = "block";
         miniTapButton.innerText = "PUSH!!";
@@ -899,7 +875,6 @@ socket.on("onInitRoomState", (state) => {
     updateAdminDropdown();
     logContainer.innerHTML = ""; if (state.logs) state.logs.forEach(log => appendLogToUI(log));
 
-    // 📌 상단 뱃지 등 관전자 안내 메시지에서 감독관 이름 및 권한 표시 부분 필터링 및 제거
     if (state.directorName) {
         if (state.directorToken === "DIR_TOKEN_" + myProfileName) {
             isReferee = true; myDirectorName = state.directorName;

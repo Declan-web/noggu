@@ -15,9 +15,9 @@ const io = new Server(server, {
 
 // 정적 파일 서버 디렉터리 바인딩
 app.use(express.static(path.join(__dirname, 'public')));
-app.use(express.static(__dirname)); // 현재 폴더도 스태틱으로 추가 인정 (경로 꼬임 방지)
+app.use(express.static(__dirname));
 
-// 안전한 HTML 파일 제공 함수 (public/index.html 또는 같은 폴더의 index.html 추적)
+// 안전한 HTML 파일 제공 함수
 function sendIndexHtml(req, res) {
     const publicPath = path.join(__dirname, 'public', 'index.html');
     const rootPath = path.join(__dirname, 'index.html');
@@ -36,13 +36,12 @@ function sendIndexHtml(req, res) {
     }
 }
 
-// 기본 루트 라우터
 app.get('/', (req, res) => {
     sendIndexHtml(req, res);
 });
 
-// 글로벌 경기 구역 인메모리 데이터베이스 (0001, 0002 등)
-const roomsData = {};
+// 글로벌 경기 구역 인메모리 데이터베이스
+let roomsData = {};
 
 const COURT_WIDTH = 1000;
 const COURT_HEIGHT = 500;
@@ -179,6 +178,9 @@ io.on('connection', (socket) => {
             y: data.y,
             angle: data.angle
         });
+        
+        // 📌 등록/취소 후 최신 전체 방 상태를 전 유저에게 실시간으로 강제 주입합니다.
+        io.to(currentRoomId).emit('onInitRoomState', room);
     });
 
     socket.on('syncPlayerMove', (data) => {
@@ -278,12 +280,15 @@ io.on('connection', (socket) => {
         }
     });
 
+    // 📌 [수정] 감독 등록 시 새로고침 없이 전 유저에게 즉시 반영되도록 소켓 주입 보완
     socket.on('syncRegisterDirector', (data) => {
         if (!currentRoomId) return;
         const room = getOrCreateRoom(currentRoomId);
         room.directorName = data.name;
         room.directorToken = data.token;
+        
         io.to(currentRoomId).emit('onRegisterDirector', data);
+        io.to(currentRoomId).emit('onInitRoomState', room); // 즉시 갱신 강제 브로드캐스트
     });
 
     socket.on('syncStartMiniGame', (data) => {
@@ -360,8 +365,6 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => {});
 });
 
-// 📌 [완벽 방어] 오류의 소지가 있는 문자열 주소 패턴 검사를 거치지 않고, 
-// 상단에 정의되지 않은 모든 엉뚱한 요청은 무조건 index.html을 보여주도록 미들웨어 처리했습니다.
 app.use((req, res) => {
     sendIndexHtml(req, res);
 });

@@ -237,7 +237,7 @@ io.on('connection', (socket) => {
         room.globalDefenseLockUntil = 0;
         
         io.to(currentRoomId).emit('onStartGame', data);
-        const log = addLog(room, 'score', "시합이 시작되었습니다! 매치가 진행됩니다.");
+        const log = addLog(room, 'score', "시합이 시작되었습니다! 다들 뛰어!");
         io.to(currentRoomId).emit('onNewLog', log);
     });
 
@@ -276,7 +276,7 @@ io.on('connection', (socket) => {
         socket.to(currentRoomId).emit('onScoreUpdate', data);
 
         const targetTeamName = data.scoringTeam === "BLUE" ? room.teamBlueName : room.teamRedName;
-        const log = addLog(room, 'score', `🎉 [득점] ${targetTeamName} 팀이 2점을 추가 달성했습니다! (${room.scoreBlue} VS ${room.scoreRed})`);
+        const log = addLog(room, 'score', `${targetTeamName} 팀 2 점 득점 (${room.scoreBlue} VS ${room.scoreRed})`);
         io.to(currentRoomId).emit('onNewLog', log);
     });
 
@@ -361,7 +361,7 @@ io.on('connection', (socket) => {
             room.ballState.holderId = room.activeDefender.id;
             room.ballState.isFlying = false;
 
-            const log = addLog(room, 'defense', `🛡️ [시간 만료 판정] 수비진영(보라)의 압박 판정승! 공을 탈환했습니다.`);
+            const log = addLog(room, 'defense', `디펜스 성공! 공의 소유권을 빼앗아 옵니다.`);
             io.to(roomId).emit('onNewLog', log);
             io.to(roomId).emit('onEndMiniGame', { 
                 isDefWin: true, 
@@ -375,7 +375,7 @@ io.on('connection', (socket) => {
             room.ballState.holderId = room.activeAttacker.id;
             room.ballState.isFlying = false;
 
-            const log = addLog(room, 'defense', `⚡ [시간 만료 판정] 공격진영(황금)의 돌파 판정승! 돌파에 성공했습니다.`);
+            const log = addLog(room, 'defense', `디펜스 실패! 공의 소유권을 유지합니다.`);
             io.to(roomId).emit('onNewLog', log);
             io.to(roomId).emit('onEndMiniGame', { 
                 isDefWin: false, 

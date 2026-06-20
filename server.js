@@ -50,10 +50,10 @@ function getOrCreateRoom(roomId) {
             directorName: null,
             directorToken: null,
             globalDefenseLockUntil: 0,
-            miniGameGauge: 25, // 0~50 기준 중앙 25 시작
+            miniGameGauge: 25, 
             activeDefender: null,
             activeAttacker: null,
-            miniGameTimerId: null, // 5초 타임어택 스케줄러 타이머
+            miniGameTimerId: null, 
             registeredOwners: [],
             logs: [],
             ballState: {
@@ -214,7 +214,7 @@ io.on('connection', (socket) => {
         io.to(currentRoomId).emit('onInitRoomState', room);
     });
 
-    // 📌 리셋 버튼 클릭 시 모든 포지션, 선택 기록 및 캐릭터 세션 정보를 서버에서 완전히 지우는 오류 수정본
+    // 🔄 리셋 버튼 클릭 시 서버의 방 정보를 완전 삭제하는 로직 (기존 원본 유지)
     socket.on('syncResetMatch', () => {
         if (!currentRoomId) return;
         const room = roomsData[currentRoomId];
@@ -252,7 +252,7 @@ io.on('connection', (socket) => {
         io.to(currentRoomId).emit('onInitRoomState', room);
     });
 
-    // 📌 공격(황금색: #FFD700)과 수비(보라색: #8A2BE2)의 전용 색상 적용 및 디펜스 결투 개시
+    // 📌 수비 및 공격 색상 변경 요청 반영 (공격 황금색: #FFD700 / 수비 보라색: #8A2BE2)
     socket.on('syncStartMiniGame', (data) => {
         if (!currentRoomId) return;
         const room = getOrCreateRoom(currentRoomId);
@@ -269,7 +269,7 @@ io.on('connection', (socket) => {
             defenderColor: '#8A2BE2'  
         });
 
-        // 📌 [핵심 변경] 중간에 끝내지 않고 정확히 5초 동안 연타를 기록한 후 타이머가 만료되었을 때 승자를 판정함
+        // 📌 게이지와 상관없이 무조건 5초 뒤 자동으로 판정을 내리도록 타이머 설정
         room.miniGameTimerId = setTimeout(() => {
             handleMiniGameTimeout(currentRoomId);
         }, 5000);
@@ -289,7 +289,7 @@ io.on('connection', (socket) => {
         io.to(currentRoomId).emit('onMiniGameGauge', room.miniGameGauge);
     });
 
-    // 📌 [핵심 변경] 5초 타임업 시점에 게이지를 더 많이 채운 쪽을 판정하여 소유권 부여
+    // 📌 5초 타임업 시점에 게이지를 더 많이 누른 팀을 판정하여 공 소유권 이전
     function handleMiniGameTimeout(roomId) {
         const room = roomsData[roomId];
         if (!room || room.gameState !== "MINIGAME") return;
@@ -297,7 +297,7 @@ io.on('connection', (socket) => {
         room.gameState = "PLAYING";
         room.globalDefenseLockUntil = Date.now() + 5000;
 
-        // 기준점인 중앙값 25보다 크면 수비진영(보라색)이 더 많이 채운 것이므로 수비 승리 (스틸)
+        // 중앙값 25를 기준으로 더 많이 채운 쪽 판정 (수비진영 연타가 더 많으면 25 초과)
         if (room.miniGameGauge > 25) {
             room.ballState.holderTeam = room.activeDefender.team;
             room.ballState.holderId = room.activeDefender.id;
@@ -306,7 +306,7 @@ io.on('connection', (socket) => {
             const log = addLog(room, 'defense', `🛡️ [타임업] 수비진영(보라색) 판정승! 공을 스틸했습니다.`);
             io.to(roomId).emit('onNewLog', log);
         } else { 
-            // 기준점 25 이하이면 공격진영(황금색)이 더 많이 채웠거나 유지한 것이므로 공격 승리 (돌파 및 유지)
+            // 공격진영 연타가 더 많거나 같으면 25 이하
             room.ballState.holderTeam = room.activeAttacker.team;
             room.ballState.holderId = room.activeAttacker.id;
             room.ballState.isFlying = false;

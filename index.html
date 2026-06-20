@@ -6,197 +6,60 @@
     <script src="/socket.io/socket.io.js"></script>
     <style>
         body {
-            background-color: #1a1a1a;
-            color: #ffffff;
-            font-family: 'Noto Sans KR', sans-serif;
-            margin: 0;
-            padding: 20px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
+            background-color: #1a1a1a; color: #ffffff; font-family: 'Noto Sans KR', sans-serif;
+            margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center;
         }
-        #container {
-            width: 1000px;
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-        }
+        #container { width: 1000px; display: flex; flex-direction: column; gap: 15px; }
         #auth-section {
-            background: #2a2a2a;
-            padding: 15px;
-            border-radius: 8px;
-            display: flex;
-            gap: 10px;
-            justify-content: center;
-            align-items: center;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            background: #2a2a2a; padding: 15px; border-radius: 8px; display: flex; gap: 10px;
+            justify-content: center; align-items: center; box-shadow: 0 4px 6px rgba(0,0,0,0.3);
         }
         input, button, select {
-            background: #3a3a3a;
-            border: 1px solid #555;
-            color: #fff;
-            padding: 8px 12px;
-            border-radius: 4px;
-            font-size: 14px;
+            background: #3a3a3a; border: 1px solid #555; color: #fff; padding: 8px 12px; border-radius: 4px; font-size: 14px;
         }
-        button {
-            cursor: pointer;
-            background: #4a4a4a;
-            font-weight: bold;
-            transition: background 0.2s;
-        }
-        button:hover {
-            background: #5a5a5a;
-        }
+        button { cursor: pointer; background: #4a4a4a; font-weight: bold; transition: background 0.2s; }
+        button:hover { background: #5a5a5a; }
+        
         #game-screen {
-            position: relative;
-            width: 1000px;
-            height: 500px;
-            background: #252525;
-            border: 4px solid #444;
-            border-radius: 8px;
-            overflow: hidden;
-            display: none;
-            box-shadow: 0 6px 12px rgba(0,0,0,0.5);
+            position: relative; width: 1000px; height: 500px; background: #252525;
+            border: 4px solid #444; border-radius: 8px; overflow: hidden; display: none; box-shadow: 0 6px 12px rgba(0,0,0,0.5);
         }
         #setup-board {
-            position: absolute;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0, 0, 0, 0.85);
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            gap: 20px;
-            z-index: 10;
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.85); display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 20px; z-index: 10;
         }
-        .setup-row {
-            display: flex;
-            gap: 20px;
-            background: #222;
-            padding: 15px;
-            border-radius: 6px;
-            border: 1px solid #444;
-        }
+        .setup-row { display: flex; gap: 20px; background: #222; padding: 15px; border-radius: 6px; border: 1px solid #444; }
         
-        /* 📌 디펜스 경합 오버레이 테마 스타일 */
         #minigame-overlay {
-            position: absolute;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0, 0, 0, 0.9);
-            display: none;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            z-index: 20;
-            box-sizing: border-box;
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.9); display: none; flex-direction: column; justify-content: center; align-items: center; z-index: 20; box-sizing: border-box;
         }
-        #minigame-title {
-            font-size: 28px;
-            font-weight: bold;
-            margin-bottom: 5px;
-            text-shadow: 0 0 10px rgba(255,255,255,0.5);
-            letter-spacing: 2px;
-        }
+        #minigame-title { font-size: 28px; font-weight: bold; margin-bottom: 5px; text-shadow: 0 0 10px rgba(255,255,255,0.5); letter-spacing: 2px; }
         #minigame-timer {
-            font-size: 22px;
-            color: #ff4757;
-            font-weight: bold;
-            margin-bottom: 15px;
-            background: #000;
-            padding: 5px 15px;
-            border-radius: 20px;
-            border: 1px solid #ff4757;
+            font-size: 22px; color: #ff4757; font-weight: bold; margin-bottom: 15px;
+            background: #000; padding: 5px 15px; border-radius: 20px; border: 1px solid #ff4757;
         }
-        #gauge-container {
-            width: 600px;
-            height: 35px;
-            background: #333;
-            border: 3px solid #fff;
-            border-radius: 20px;
-            overflow: hidden;
-            position: relative;
-            box-shadow: 0 0 15px rgba(0,0,0,0.5);
-        }
-        #gauge-bar {
-            width: 50%;
-            height: 100%;
-            background: #FFD700; 
-            transition: width 0.08s ease-out;
-        }
-        #gauge-center-line {
-            position: absolute;
-            top: 0; left: 50%; width: 4px; height: 100%;
-            background: #ffffff;
-            transform: translateX(-50%);
-            opacity: 0.7;
-        }
-        #minigame-guide {
-            margin-top: 15px;
-            font-size: 16px;
-            color: #ccc;
-            background: #222;
-            padding: 8px 20px;
-            border-radius: 4px;
-        }
+        #gauge-container { width: 600px; height: 35px; background: #333; border: 3px solid #fff; border-radius: 20px; overflow: hidden; position: relative; }
+        #gauge-bar { width: 50%; height: 100%; background: #FFD700; transition: width 0.08s ease-out; }
+        #gauge-center-line { position: absolute; top: 0; left: 50%; width: 4px; height: 100%; background: #ffffff; transform: translateX(-50%); opacity: 0.7; }
+        #minigame-guide { margin-top: 15px; font-size: 16px; color: #ccc; background: #222; padding: 8px 20px; border-radius: 4px; }
+        
         .player-token {
-            position: absolute;
-            width: 32px;
-            height: 32px;
-            border-radius: 50%;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            font-size: 11px;
-            font-weight: bold;
-            color: #fff;
-            transform: translate(-50%, -50%);
-            box-shadow: 0 3px 6px rgba(0,0,0,0.4);
-            user-select: none;
-            cursor: pointer;
-            z-index: 6;
+            position: absolute; width: 32px; height: 32px; border-radius: 50%; display: flex; flex-direction: column;
+            justify-content: center; align-items: center; font-size: 11px; font-weight: bold; color: #fff;
+            transform: translate(-50%, -50%); box-shadow: 0 3px 6px rgba(0,0,0,0.4); user-select: none; cursor: pointer; z-index: 6;
         }
         .team-blue { background: #1e3799; border: 2px solid #4a89ff; }
         .team-red { background: #b71540; border: 2px solid #ff4d4d; }
-        .player-label {
-            position: absolute;
-            bottom: -18px;
-            background: rgba(0,0,0,0.7);
-            padding: 1px 4px;
-            border-radius: 3px;
-            font-size: 9px;
-            white-space: nowrap;
-            pointer-events: none;
-        }
+        .player-label { position: absolute; bottom: -18px; background: rgba(0,0,0,0.7); padding: 1px 4px; border-radius: 3px; font-size: 9px; white-space: nowrap; pointer-events: none; }
         .player-token:hover { box-shadow: 0 0 10px #fffb00; }
         .my-controlled { box-shadow: 0 0 15px #00ff88 !important; border-color: #00ff88 !important; }
 
-        #game-ball {
-            position: absolute;
-            width: 18px;
-            height: 18px;
-            background: #fffb00;
-            border: 2px solid #000;
-            border-radius: 50%;
-            transform: translate(-50%, -50%);
-            box-shadow: 0 0 10px #fffb00;
-            z-index: 5;
-        }
+        #game-ball { position: absolute; width: 18px; height: 18px; background: #fffb00; border: 2px solid #000; border-radius: 50%; transform: translate(-50%, -50%); box-shadow: 0 0 10px #fffb00; z-index: 5; }
         #dashboard { display: flex; gap: 15px; width: 1000px; }
         .panel { background: #2a2a2a; padding: 15px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.2); }
         .panel h3 { margin-top: 0; margin-bottom: 12px; font-size: 15px; border-left: 4px solid #fffb00; padding-left: 8px; }
-        #log-box {
-            height: 160px;
-            overflow-y: auto;
-            background: #111;
-            padding: 10px;
-            border-radius: 4px;
-            font-size: 13px;
-            font-family: 'Courier New', monospace;
-            line-height: 1.6;
-            border: 1px solid #444;
-        }
+        #log-box { height: 160px; overflow-y: auto; background: #111; padding: 10px; border-radius: 4px; font-size: 13px; font-family: monospace; line-height: 1.6; border: 1px solid #444; }
         .log-line { margin-bottom: 5px; border-bottom: 1px solid #222; padding-bottom: 2px; }
         .log-chat { color: #55afff; }
         .log-score { color: #ff55ff; font-weight: bold; }
@@ -212,12 +75,9 @@
 
 <div id="container">
     <div id="auth-section">
-        <label>방 번호:</label>
-        <input type="text" id="input-room" placeholder="0001" value="0001" style="width: 80px; text-align: center;">
-        <label>닉네임:</label>
-        <input type="text" id="input-name" placeholder="닉네임 입력" style="width: 150px;">
-        <label>비밀번호:</label>
-        <input type="password" id="input-pass" placeholder="비밀번호" style="width: 100px;">
+        <label>방 번호:</label> <input type="text" id="input-room" value="0001" style="width: 80px; text-align: center;">
+        <label>닉네임:</label> <input type="text" id="input-name" style="width: 150px;">
+        <label>비밀번호:</label> <input type="password" id="input-pass" style="width: 100px;">
         <button onclick="connectToRoom()">경기장 입장</button>
     </div>
 
@@ -225,25 +85,16 @@
         <div id="setup-board">
             <h2 style="margin:0; font-size:26px; color:#fffb00;">🏀 MATCH WAITING LOUNGE</h2>
             <div class="setup-row">
-                <div>
-                    <label style="color:#4a89ff; font-weight:bold;">BLUE 팀명: </label>
-                    <input type="text" id="setup-blue-name" value="TEAM BLUE" style="width:130px;">
-                </div>
-                <div>
-                    <label style="color:#ff4d4d; font-weight:bold;">RED 팀명: </label>
-                    <input type="text" id="setup-red-name" value="TEAM RED" style="width:130px;">
-                </div>
+                <div><label style="color:#4a89ff; font-weight:bold;">BLUE 팀명: </label><input type="text" id="setup-blue-name" value="TEAM BLUE" style="width:130px;"></div>
+                <div><label style="color:#ff4d4d; font-weight:bold;">RED 팀명: </label><input type="text" id="setup-red-name" value="TEAM RED" style="width:130px;"></div>
             </div>
-            <button onclick="requestStartGame()" style="padding:12px 40px; background:#2ed573; font-size:16px; border:none; color:white;">경기 개시 (START)</button>
+            <button onclick="requestStartGame()" style="padding:12px 40px; background:#2ed573; font-size:16px; color:white; border:none;">경기 개시 (START)</button>
         </div>
 
         <div id="minigame-overlay">
             <div id="minigame-title">⚡ PRESSURE DEFENSE MATCH ⚡</div>
             <div id="minigame-timer">남은 시간: 5.00초</div>
-            <div id="gauge-container">
-                <div id="gauge-bar"></div>
-                <div id="gauge-center-line"></div>
-            </div>
+            <div id="gauge-container"><div id="gauge-bar"></div><div id="gauge-center-line"></div></div>
             <div id="minigame-guide">마우스 버튼이나 [스페이스바]를 폭풍 연타하세요!</div>
             <button id="btn-hit" onclick="strokeHit()" style="margin-top:22px; padding:12px 50px; background:#FFD700; color:#000; font-size:20px; border-radius:30px;">PUSH!!</button>
         </div>
@@ -258,9 +109,7 @@
             <div>
                 <h3>📊 SCORE BOARD</h3>
                 <div style="font-size: 22px; font-weight:bold; text-align:center; margin: 12px 0; background:#1e1e1e; padding:10px; border-radius:6px;">
-                    <span id="txt-blue-team" style="color:#4a89ff;">BLUE</span> 
-                    <span id="score-blue" style="color:#fff; margin:0 10px;">0</span>:<span id="score-red" style="color:#fff; margin:0 10px;">0</span> 
-                    <span id="txt-red-team" style="color:#ff4d4d;">RED</span>
+                    <span id="txt-blue-team" style="color:#4a89ff;">BLUE</span><span id="score-blue" style="margin:0 10px;">0</span>:<span id="score-red" style="margin:0 10px;">0</span><span id="txt-red-team" style="color:#ff4d4d;">RED</span>
                 </div>
                 <div style="display:flex; gap:5px; justify-content:center; margin-bottom:10px;">
                     <button onclick="sendScore('BLUE')" style="background:#1e3799;">BLUE +2</button>
@@ -285,9 +134,7 @@
             <h3>🏃 포지션 배정 명부</h3>
             <div style="max-height:210px; overflow-y:auto; background:#1a1a1a; padding:5px; border-radius:4px;">
                 <table class="slot-table">
-                    <thead>
-                        <tr><th>팀</th><th>번호</th><th>담당 선수명</th><th>동작</th></tr>
-                    </thead>
+                    <thead><tr><th>팀</th><th>번호</th><th>담당 선수명</th><th>동작</th></tr></thead>
                     <tbody id="slot-tbody"></tbody>
                 </table>
             </div>
@@ -497,7 +344,7 @@
     
     function requestReset() { if(confirm("모든 데이터를 포맷 초기화하시겠습니까?")) socket.emit('syncResetMatch'); }
     
-    // 📌 [잔상 제거 수정 핵심] 클라이언트 세션 변수, 필드 위의 DOM 노란색 토큰 흔적 전량 파괴
+    // 📌 [잔상 완벽 박멸] 룸 데이터 및 DOM 내 캐릭터 흔적 파괴 클라이언트 디스패처
     socket.on('onResetMatch', () => {
         clearMiniGameTimer();
         myRoomId = null; myRole = null; myAssignedTeam = null; myAssignedId = null;
@@ -517,7 +364,7 @@
         alert("모든 포지션 및 캐릭터 선택 기록이 초기화되었습니다. 다시 로그인 해주세요!");
     });
 
-    // 📌 공격(황금색), 수비(보라색) UI 전용 테마 바인딩 연출
+    // 📌 [디펜스 오버레이] 공격(황금색), 수비(보라색) 적용 및 5초 전용 스케줄러 세팅
     socket.on('onStartMiniGame', (data) => {
         const overlay = document.getElementById('minigame-overlay');
         const gaugeBar = document.getElementById('gauge-bar');

@@ -91,7 +91,6 @@ function addLog(room, type, message) {
     return logEntry;
 }
 
-// 서버 메인 루프 (60FPS) - 공의 자유 이동은 온전히 서버 주도로 연산 및 브로드캐스트하여 순간 이동 제거
 setInterval(() => {
     Object.keys(roomsData).forEach(roomId => {
         const room = roomsData[roomId];
@@ -118,8 +117,6 @@ setInterval(() => {
                 ball.vy = 0;
                 ball.isFlying = false;
             }
-            // 소유자가 없을 때 실시간 위치 데이터를 클라이언트에 하향 강제 전송
-            io.to(roomId).emit('onBallAction', ball);
         }
     });
 }, 1000 / 60);
@@ -199,19 +196,16 @@ io.on('connection', (socket) => {
     socket.on('syncBallAction', (data) => {
         if (!currentRoomId) return;
         const room = getOrCreateRoom(currentRoomId);
-        
-        // 📌 [버그 수정]: 공의 소유자가 지정되어 있거나, 패스/슛/줍기 액션이 직접 발생했을 때만 상태 덮어쓰기 허용 (순간이동 제어)
-        if (data.holderId || data.isActionSignal || !room.ballState.isFlying) {
-            room.ballState.x = data.x;
-            room.ballState.y = data.y;
-            room.ballState.vx = data.vx;
-            room.ballState.vy = data.vy;
-            room.ballState.isFlying = data.isFlying;
-            room.ballState.holderId = data.holderId || null;
-            room.ballState.holderTeam = data.holderTeam || null;
-            room.ballState.lastShooterSkill = data.lastShooterSkill || 5.0;
-            socket.to(currentRoomId).emit('onBallAction', room.ballState);
-        }
+        room.ballState.x = data.x;
+        room.ballState.y = data.y;
+        room.ballState.vx = data.vx;
+        room.ballState.vy = data.vy;
+        room.ballState.isFlying = data.isFlying;
+        room.ballState.holderId = data.holderId || null;
+        room.ballState.holderTeam = data.holderTeam || null;
+        room.ballState.lastShooterSkill = data.lastShooterSkill || 5.0;
+
+        socket.to(currentRoomId).emit('onBallAction', data);
     });
 
     socket.on('syncMatchCapacity', (data) => {
@@ -222,7 +216,6 @@ io.on('connection', (socket) => {
         io.to(currentRoomId).emit('onMatchCapacityChange', data);
     });
 
-    socket.to(currentRoomId);
     socket.on('syncLiveTeamName', (data) => {
         if (!currentRoomId) return;
         const room = getOrCreateRoom(currentRoomId);
@@ -240,6 +233,7 @@ io.on('connection', (socket) => {
         room.maxBluePlayers = data.maxBluePlayers;
         room.maxRedPlayers = data.maxRedPlayers;
         room.globalDefenseLockUntil = 0;
+        
         io.to(currentRoomId).emit('onStartGame', data);
         const log = addLog(room, 'score', "시합이 시작되었습니다! 다들 뛰어!");
         io.to(currentRoomId).emit('onNewLog', log);
@@ -256,13 +250,19 @@ io.on('connection', (socket) => {
         io.to(currentRoomId).emit('onGameStateChange', { state: room.gameState });
     });
 
+    // 📌 경기 리셋 수신: 서버 내 방 인프라 및 메모리를 완전히 파괴하여 잔상을 원천 차단
     socket.on('syncResetMatch', () => {
         if (!currentRoomId) return;
+        
         const room = roomsData[currentRoomId];
         if (room && room.miniGameTimerId) {
             clearTimeout(room.miniGameTimerId);
         }
+
+        // 완벽하게 해당 코트 데이터를 밀어버려 클라이언트 재진입 시 정보 기억 현상을 제거합니다.
         delete roomsData[currentRoomId];
+        
+        // 모든 클라이언트 브라우저 상태를 밀어버리도록 강제 동기화 명령 전송
         io.to(currentRoomId).emit('onResetMatch');
     });
 
@@ -271,53 +271,75 @@ io.on('connection', (socket) => {
         const room = getOrCreateRoom(currentRoomId);
         room.scoreBlue = data.blue;
         room.scoreRed = data.red;
-        io.to(currentRoomId).emit('onScoreChange', data);
-        const tName = data.scoringTeam === "BLUE" ? room.teamBlueName : room.teamRedName;
-        const log = addLog(room, 'score', `🎉 [득점] ${tName} 팀 득점! (${room.scoreBlue} VS ${room.scoreRed})`);
+        
+        // 📌 클라이언트의 이벤트 리스너(onScoreChange)와 매칭 완료
+        io.to(currentRoomId).emit('onScoreChange', { blue: room.scoreBlue, red: room.scoreRed });
+
+        const targetTeamName = data.scoringTeam === "BLUE" ? room.teamBlueName : room.teamRedName;
+        const log = addLog(room, 'score', `${targetTeamName} 팀 2 점 득점 (${room.scoreBlue} VS ${room.scoreRed})`);
         io.to(currentRoomId).emit('onNewLog', log);
     });
 
+    // 📌 HTML의 syncPlayerSkillChange 요청과 매칭하여 실시간 경기력(레벨) 변동을 반영
+    socket.on('syncPlayerSkillChange', (data) => {
+        if (!currentRoomId) return;
+        const room = getOrCreateRoom(currentRoomId);
+        const idNum = parseInt(data.id);
+        const p = room.registeredOwners.find(o => o.team === data.team && o.id === idNum);
+        if (p) {
+            p.skillLevel = parseFloat(data.level);
+            
+            // 변경된 인프라 상태를 룸 전체에 다시 뿌려 실시간 브리핑 적용
+            io.to(currentRoomId).emit('onInitRoomState', room);
+        }
+    });
+
+    // 📌 HTML의 syncDirectorAuth 요청과 매칭하여 감독 권한 활성화 동기화
+    socket.on('syncDirectorAuth', (data) => {
+        if (!currentRoomId) return;
+        const room = getOrCreateRoom(currentRoomId);
+        room.directorName = data.name;
+        room.directorToken = data.token;
+        
+        const log = addLog(room, 'chat', `👑 ${data.name} 님이 본 코트의 총감독으로 취임하였습니다.`);
+        io.to(currentRoomId).emit('onNewLog', log);
+        io.to(currentRoomId).emit('onInitRoomState', room);
+    });
+
+    // 미니게임 개시
     socket.on('syncStartMiniGame', (data) => {
         if (!currentRoomId) return;
         const room = getOrCreateRoom(currentRoomId);
         
-        // 📌 [버그 수정]: 이미 미니게임이 진행 중이거나 쿨타임 제한이 풀리지 않은 상태에서의 무분별한 4연속 격돌 차단
-        const currentTime = Date.now();
-        if (room.gameState === "MINIGAME" || currentTime < room.globalDefenseLockUntil) {
-            return; 
-        }
-
-        if (room.miniGameTimerId) {
-            clearTimeout(room.miniGameTimerId);
-        }
+        if (room.miniGameTimerId) clearTimeout(room.miniGameTimerId);
 
         room.gameState = "MINIGAME";
-        room.miniGameGauge = 25;
+        room.miniGameGauge = 25; 
         room.activeDefender = { team: data.defTeam, id: data.defId };
         room.activeAttacker = { team: data.attTeam, id: data.attId };
-
+        
         io.to(currentRoomId).emit('onStartMiniGame', {
-            attTeam: data.attTeam,
-            attId: data.attId,
-            defTeam: data.defTeam,
-            defId: data.defId,
-            attackerColor: '#ffcc00',
-            defenderColor: '#3498db'
+            ...data,
+            attackerColor: '#FFD700', 
+            defenderColor: '#8A2BE2' 
         });
 
-        // 타임아웃 타이머 스케줄 제어
         room.miniGameTimerId = setTimeout(() => {
             handleMiniGameTimeout(currentRoomId);
         }, 5000);
     });
 
+    // 미니게임 실시간 난타 스트로크 수신
     socket.on('syncMiniGameHit', (data) => {
         if (!currentRoomId) return;
-        const room = roomsData[currentRoomId];
-        if (!room || room.gameState !== "MINIGAME") return;
+        const room = getOrCreateRoom(currentRoomId);
+        if (room.gameState !== "MINIGAME") return;
 
-        if (data.role === "DEFENDER") room.miniGameGauge += 1;
-        else if (data.role === "ATTACKER") room.miniGameGauge -= 1;
+        if (data.role === "DEFENDER") {
+            room.miniGameGauge += 1;
+        } else if (data.role === "ATTACKER") {
+            room.miniGameGauge -= 1;
+        }
 
         if (room.miniGameGauge > 50) room.miniGameGauge = 50;
         if (room.miniGameGauge < 0) room.miniGameGauge = 0;
@@ -330,22 +352,20 @@ io.on('connection', (socket) => {
         if (!room || room.gameState !== "MINIGAME") return;
 
         room.gameState = "PLAYING";
-        room.globalDefenseLockUntil = Date.now() + 5000; // 확실한 5초 면제 선언
+        room.globalDefenseLockUntil = Date.now() + 5000;
 
         if (room.miniGameGauge > 25) {
             room.ballState.holderTeam = room.activeDefender.team;
             room.ballState.holderId = room.activeDefender.id;
             room.ballState.isFlying = false;
-            room.ballState.vx = 0;
-            room.ballState.vy = 0;
 
-            const log = addLog(room, 'defense', `디펜스 성공! 공을 스틸했습니다.`);
+            const log = addLog(room, 'defense', `디펜스 성공! 공의 소유권을 빼앗아 옵니다.`);
             io.to(roomId).emit('onNewLog', log);
-            io.to(roomId).emit('onEndMiniGame', {
-                isDefWin: true,
-                holderTeam: room.activeDefender.team,
-                holderId: room.activeDefender.id,
-                globalDefenseLockUntil: room.globalDefenseLockUntil
+            io.to(roomId).emit('onEndMiniGame', { 
+                isDefWin: true, 
+                holderTeam: room.activeDefender.team, 
+                holderId: room.activeDefender.id, 
+                globalDefenseLockUntil: room.globalDefenseLockUntil 
             });
         } else {
             room.ballState.holderTeam = room.activeAttacker.team;
@@ -354,41 +374,14 @@ io.on('connection', (socket) => {
 
             const log = addLog(room, 'defense', `디펜스 실패! 공의 소유권을 유지합니다.`);
             io.to(roomId).emit('onNewLog', log);
-            io.to(roomId).emit('onEndMiniGame', {
-                isDefWin: false,
-                holderTeam: room.activeAttacker.team,
-                holderId: room.activeAttacker.id,
-                globalDefenseLockUntil: room.globalDefenseLockUntil
+            io.to(roomId).emit('onEndMiniGame', { 
+                isDefWin: false, 
+                holderTeam: room.activeAttacker.team, 
+                holderId: room.activeAttacker.id, 
+                globalDefenseLockUntil: room.globalDefenseLockUntil 
             });
         }
-        
-        if (room.miniGameTimerId) {
-            clearTimeout(room.miniGameTimerId);
-            room.miniGameTimerId = null;
-        }
     }
-
-    socket.on('syncDirectorAuth', (data) => {
-        if (!currentRoomId) return;
-        const room = getOrCreateRoom(currentRoomId);
-        room.directorName = data.name;
-        room.directorToken = data.token;
-        io.to(currentRoomId).emit('onDirectorAuthSuccess', data);
-        const log = addLog(room, 'chat', `👑 [시스템] ${data.name} 님이 총감독으로 선임되었습니다.`);
-        io.to(currentRoomId).emit('onNewLog', log);
-    });
-
-    socket.on('syncPlayerSkillChange', (data) => {
-        if (!currentRoomId) return;
-        const room = getOrCreateRoom(currentRoomId);
-        const p = room.registeredOwners.find(o => o.team === data.team && o.id === data.id);
-        if (p) {
-            p.skillLevel = parseFloat(data.level);
-            io.to(currentRoomId).emit('onInitRoomState', room);
-            const log = addLog(room, 'chat', `⚡ [능력치 조정] ${p.ownerName} 선수의 경기력이 ${data.level}로 변경되었습니다.`);
-            io.to(currentRoomId).emit('onNewLog', log);
-        }
-    });
 
     socket.on('sendDirectorChat', (text) => {
         if (!currentRoomId) return;
@@ -401,21 +394,17 @@ io.on('connection', (socket) => {
         if (!currentRoomId) return;
         const room = getOrCreateRoom(currentRoomId);
         room.logs = [];
-        io.to(currentRoomId).emit('onInitRoomState', room);
+        io.to(currentRoomId).emit('onClearLogs');
     });
 
-    socket.on('disconnect', () => {
-        if (currentRoomId && roomsData[currentRoomId]) {
-            const room = roomsData[currentRoomId];
-            const p = room.registeredOwners.find(o => o.socketId === socket.id);
-            if (p) {
-                // 끊겨도 시각적 잔상 고착 현상 제거용 로직 확장 가능
-            }
-        }
-    });
+    socket.on('disconnect', () => {});
+});
+
+app.use((req, res) => {
+    sendIndexHtml(req, res);
 });
 
 const PORT = 3000;
 server.listen(PORT, () => {
-    console.log(`서버 오픈: http://localhost:${PORT}`);
+    console.log(`다들 모여 매치 코어 서버 연동 완료: http://localhost:${PORT}`);
 });

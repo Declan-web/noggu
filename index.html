@@ -449,7 +449,7 @@ let ball = {
 
 function initGameWorld() {
     players = [];
-    // BLUE TEAM (좌측 진영 배치)
+    // BLUE TEAM
     for (let i = 1; i <= 5; i++) {
         players.push({
             team: "BLUE", id: i, x: 200, y: 60 + i * 65, radius: 14,
@@ -457,7 +457,7 @@ function initGameWorld() {
             baseColor: "#3498db", strokeColor: "#2980b9", skillLevel: 5.0
         });
     }
-    // RED TEAM (우측 진영 배치)
+    // RED TEAM
     for (let i = 1; i <= 5; i++) {
         players.push({
             team: "RED", id: i, x: 800, y: 60 + i * 65, radius: 14,
@@ -485,7 +485,9 @@ function requestFullScreen() {
 function authReferee() {
     const name = document.getElementById("refName").value.trim();
     const key = document.getElementById("refKey").value.trim();
-    if (key === "0326") {
+    
+    // 📌 [감독 인증 코드 qwer 고정 변경]
+    if (key === "qwer") {
         isReferee = true;
         myDirectorName = name || "총감독";
         document.getElementById("refName").disabled = true;
@@ -570,9 +572,11 @@ function togglePause() {
     socket.emit('syncTogglePause');
 }
 
+// 📌 [리셋 시 선수 정보 기억 완전 제거 및 최초 로그인 첫 화면 복귀 구현]
 function triggerManualReset() {
-    if(confirm("경기를 리셋하시겠습니까? 모든 유저의 자리 할당이 초기화됩니다.")) {
-        socket.emit('syncResetMatch');
+    if(confirm("경기를 완전히 리셋하시겠습니까? 모든 선수 정보가 초기화되고 첫 로그인 화면으로 이동합니다.")) {
+        localStorage.clear(); // 브라우저에 캐싱된 정보 완전 초기화
+        socket.emit('syncResetMatch'); // 서버 측 리셋 호출
     }
 }
 
@@ -620,7 +624,6 @@ function getCanvasMousePos(e) {
 }
 
 function handleLeftClickDefense(e) {
-    // 📌 [버그 수정]: 디펜스 쿨타임 또는 이미 미니게임 진행 중일 때는 중복 시도 무력화
     if (gameState !== "PLAYING" || Date.now() < globalDefenseLockUntil) return;
     if (!myControllingPlayer || ball.holderId === null) return;
     if (ball.holderTeam === myControllingPlayer.team) return;
@@ -732,7 +735,7 @@ if (isMobileDevice) {
             if(!myControllingPlayer) return;
             const holder = players.find(o => o.team === ball.holderTeam && o.id === ball.holderId);
             if(holder) {
-                socket.emit('syncStartMiniGame', { attTeam: holder.team, attId: holder.id, defTeam: myControllingPlayer.team, defId: myControllingPlayer.id });
+                socket.emit('syncStartMiniGame', { attTeam: holder.team, id: holder.id, defTeam: myControllingPlayer.team, defId: myControllingPlayer.id });
             }
         }
     });
@@ -811,7 +814,7 @@ function handleShootAction() {
         const angle = Math.atan2(goal.y - p.y, goal.x - p.x);
         
         let power = p.skillLevel * 2.3;
-        if (power > BALL_MAX_SPEED) power = BALL_MAX_SPEED;
+        if (power > 25) power = 25; // BALL_MAX_SPEED 대입
 
         ball.holderId = null; ball.holderTeam = null; ball.isFlying = true;
         ball.vx = Math.cos(angle) * power;
@@ -851,7 +854,7 @@ socket.on('onInitRoomState', (room) => {
         }
     });
 
-    conststillSelf = room.registeredOwners.some(o => o.ownerName === myProfileName);
+    const stillSelf = room.registeredOwners.some(o => o.ownerName === myProfileName);
     if (!stillSelf) {
         myControllingPlayer = null;
     }
@@ -938,7 +941,7 @@ socket.on('onScoreChange', (data) => {
 
 socket.on('onResetMatch', () => {
     localStorage.clear();
-    location.reload();
+    location.reload(); // 브라우저 상태 초기화 후 첫 화면 강제 복귀
 });
 
 socket.on("onStartMiniGame", (data) => { startMiniGameUI(data); });
@@ -1097,13 +1100,8 @@ function updateLocalPhysics(dt) {
             ball.x = holder.x + Math.cos(holder.angle) * 14;
             ball.y = holder.y + Math.sin(holder.angle) * 14;
         }
-    } else {
-        if (!ball.isFlying) {
-            // 자유 이동 상태일 때는 서버의 권한 브로드캐스트가 실시간 동기화하므로 중복 가산 배제
-        }
     }
 
-    // 골대 득점 감지 권한 판정 (심판 브라우저 전담 가이드라인 유지)
     if (isReferee && !ball.isFlying && ball.holderId === null) {
         const distToLeftGoal = Math.hypot(ball.x - court.leftGoal.x, ball.y - court.leftGoal.y);
         if (distToLeftGoal <= court.leftGoal.radius + ball.radius) {
